@@ -3,8 +3,11 @@
     <description>Module to estimate human internal dynamics</description>
     <version>1.0</version>
 
-    <var name="generic_node">icub23</var>
-    <var name="ipopt_node">icub-blade</var>
+    <!--var name="generic_node">icub23</var>
+    <var name="ipopt_node">icub-blade</var-->
+
+	<var name="generic_node">localhost</var>
+    <var name="ipopt_node">localhost</var>
 
     <module>
         <name>yarplogger</name>
@@ -25,10 +28,10 @@
 
     <module>
         <name>human-forces-provider</name>
-        <parameters>--humanModelFilename urdfs/Meri66DoF.urdf --human_JointList urdfs/config/66DoFModel.ini --rosForceScale 0.001</parameters>
+        <parameters>--humanModelFilename urdfs/Meri66DoF.urdf --sources "(FTSH1, FTSH2)" --human_JointList urdfs/config/66DoFModel.ini --rosForceScale 0.001</parameters>
         <dependencies>
-            <port timeout="10">/amti/first/analog:o</port>
-            <port timeout="10">/amti/second/analog:o</port>
+            <port timeout="10">/ft/ftShoe_Right/analog:o</port>
+            <port timeout="10">/ft/ftShoe_Left/analog:o</port>
         </dependencies>
         <node>${ipopt_node}</node>
     </module>
@@ -93,7 +96,7 @@
           <protocol>udp</protocol>
     </connection>
 
-    <connection>
+    <!--connection>
           <from>/wholeBodyDynamics/left_hand/endEffectorWrench:o</from>
           <to>/human-forces-provider/source_3/force:i</to>
           <protocol>udp</protocol>
@@ -103,7 +106,7 @@
           <from>/wholeBodyDynamics/right_hand/endEffectorWrench:o</from>
           <to>/human-forces-provider/source_4/force:i</to>
           <protocol>udp</protocol>
-    </connection>
+    </connection-->
 
     <connection>
           <from>/human-forces-provider/forces:o</from>
@@ -126,7 +129,7 @@
     <connection>
           <from>/xsens/cmd:i</from>
           <to>/human-tf-bridge/segmentsList:o</to>
-          <protocol>tcp</protocol>
+          <protocol>udp</protocol>
     </connection>
 
 </application>
