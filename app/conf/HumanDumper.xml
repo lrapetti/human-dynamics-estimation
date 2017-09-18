@@ -1,0 +1,137 @@
+<application>
+    <name>HumanDumper</name>
+    <description>Dumper for HDE modules</description>
+
+    <var name="generic_node">hde-win</var>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/humanDynEstimation</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/humanState</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/humanForces</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/xsensDriver</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+     <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/ftShoeDriver_Left/totalForce</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/ftShoeDriver_Right/totalForce</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/ftShoeDriver_Left/frontForce</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/ftShoeDriver_Right/frontForce</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/ftShoeDriver_Left/rearForce</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /hde_dump/ftShoeDriver_Right/rearForce</parameters>
+        <node>${generic_node}</node>
+        <tag>yarpdatadumper</tag>
+    </module>
+
+    <connection>
+          <from>/human-dynamics-estimator/dynamicsEstimation:o</from>
+          <to>/hde_dump/humanDynEstimation</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/human-state-provider/state:o</from>
+          <to>/hde_dump/humanState</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/human-forces-provider/forces:o</from>
+          <to>/hde_dump/humanForces</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/xsens/frames:o</from>
+          <to>/hde_dump/xsensDriver</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/ft/ftShoe_Left/analog:o</from>
+          <to>/hde_dump/ftShoeDriver_Left/totalForce</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/ft/ftShoe_Right/analog:o</from>
+          <to>/hde_dump/ftShoeDriver_Right/totalForce</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/ft/ftShoe_Left_Front/analog:o</from>
+          <to>/hde_dump/ftShoeDriver_Left/frontForce</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/ft/ftShoe_Right_Front/analog:o</from>
+          <to>/hde_dump/ftShoeDriver_Right/frontForce</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/ft/ftShoe_Left_Rear/analog:o</from>
+          <to>/hde_dump/ftShoeDriver_Left/rearForce</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
+          <from>/ft/ftShoe_Right_Rear/analog:o</from>
+          <to>/hde_dump/ftShoeDriver_Right/rearForce</to>
+          <protocol>udp</protocol>
+    </connection>
+
+</application>
