@@ -6,8 +6,8 @@
     <!--var name="generic_node">icub23</var>
     <var name="ipopt_node">icub-blade</var-->
 
-	<var name="generic_node">localhost</var>
-    <var name="ipopt_node">localhost</var>
+    <var name="generic_node">hde-win</var>
+    <var name="ipopt_node">hde-win</var>
 
     <module>
         <name>yarplogger</name>
