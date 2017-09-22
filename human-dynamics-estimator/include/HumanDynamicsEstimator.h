@@ -9,9 +9,12 @@
 #include <iDynTree/Estimation/BerdyHelper.h>
 #include <iDynTree/KinDynComputations.h>
 #include <yarp/dev/PolyDriver.h>
+#include <yarp/dev/PreciselyTimed.h>
 #include <yarp/os/BufferedPort.h>
 #include <yarp/os/RFModule.h>
 #include <yarp/sig/Vector.h>
+
+#include <yarp/dev/IIMUFrameProvider.h>
 
 #include <Eigen/Core>
 #include <Eigen/Dense>
@@ -30,6 +33,14 @@ namespace human
     class HumanForces;
 }
 
+namespace yarp {
+    namespace experimental {
+        namespace dev {
+            class IIMUFrameProvider;
+            class IXsensMVNInterface;
+        }
+    }
+}
 
 class HumanDynamicsEstimator : public yarp::os::RFModule {
 
@@ -73,11 +84,11 @@ class HumanDynamicsEstimator : public yarp::os::RFModule {
     
     // input buffered port for reading from <human-state-provider> module
     yarp::os::BufferedPort<human::HumanState> m_humanJointConfigurationPort;
-    // inut buffered port for reading from <human-forces-provider> module
+    // input buffered port for reading from <human-forces-provider> module
     yarp::os::BufferedPort<human::HumanForces> m_humanForcesPort;
     // output buffered port for <human-dynamics-estimator> module
     yarp::os::BufferedPort<human::HumanDynamics> m_outputPort;
-    
+
     // Berdy
     iDynTree::BerdyHelper m_berdy;
 
@@ -98,6 +109,21 @@ class HumanDynamicsEstimator : public yarp::os::RFModule {
     iDynTree::SparseMatrix m_priorDynamicsRegularizationCovarianceInverse; // Sigma_d^-1
     iDynTree::VectorDynSize m_priorDynamicsRegularizationExpectedValue; // mu_d
     iDynTree::SparseMatrix m_priorMeasurementsCovarianceInverse; // Sigma_y^-1
+
+    // IIMUFrameProvider interface
+    yarp::experimental::dev::IIMUFrameProvider* m_imuFrameProvider;
+    yarp::dev::IPreciselyTimed* m_imuFrameProviderTimed;
+    yarp::dev::PolyDriver m_sensorsDriver;
+    struct {
+        //These vectors have the size of # of sensors
+        //Needed for reading inputs from the IIMUFrameProviders object
+        //Right now use only imu linear accelerations
+        //std::vector<yarp::sig::Vector> imuOrientations;
+        //std::vector<yarp::sig::Vector> imuAngularVelocities;
+        std::vector<yarp::sig::Vector> imuLinearAccelerations;
+        //std::vector<yarp::sig::Vector> imuMagneticFields;
+        std::vector<yarp::experimental::dev::IMUFrameReference> appliedToLinks;
+    } m_sensors_buffers;
 
     // Measurements vector
     iDynTree::VectorDynSize m_measurements;

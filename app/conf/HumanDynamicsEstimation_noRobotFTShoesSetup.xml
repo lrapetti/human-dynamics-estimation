@@ -70,6 +70,12 @@
     </connection>
 
     <connection>
+          <from>/xsens/imu_frames:o</from>
+          <to>/human-dynamics-estimator/xsens/imu_frames:i</to>
+          <protocol>udp</protocol>
+    </connection>
+
+    <connection>
           <from>/human-state-provider/state:o</from>
           <to>/human-forces-provider/humanState:i</to>
           <protocol>udp</protocol>
