@@ -16,6 +16,8 @@
 
 #include <yarp/dev/IIMUFrameProvider.h>
 
+#include <rtb/Filter/StateSpaceFilter.h>
+
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
@@ -125,10 +127,14 @@ class HumanDynamicsEstimator : public yarp::os::RFModule {
         std::vector<yarp::experimental::dev::IMUFrameReference> appliedToLinks;
     } m_sensors_buffers;
 
+    // Filters for obtaining dof accelerations from dof velocities
+    std::vector < rtb::Filter::StateSpaceFilter < double > > m_ssFilters;
+
     // Measurements vector
     iDynTree::VectorDynSize m_measurements;
 
     // Human state
+    std::vector<std::string> m_humanModelJoints;
     iDynTree::JointPosDoubleArray m_jointsConfiguration;
     iDynTree::JointDOFsDoubleArray m_jointsVelocity;
 
