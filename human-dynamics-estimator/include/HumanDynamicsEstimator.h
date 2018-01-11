@@ -13,6 +13,8 @@
 #include <yarp/os/RFModule.h>
 #include <yarp/sig/Vector.h>
 
+#include <rtb/Filter/StateSpaceFilter.h>
+
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
@@ -99,10 +101,14 @@ class HumanDynamicsEstimator : public yarp::os::RFModule {
     iDynTree::VectorDynSize m_priorDynamicsRegularizationExpectedValue; // mu_d
     iDynTree::SparseMatrix<iDynTree::ColumnMajor>  m_priorMeasurementsCovarianceInverse; // Sigma_y^-1
 
+    // Filters for obtaining dof accelerations from dof velocities
+    std::vector < rtb::Filter::StateSpaceFilter < double > > m_ssFilters;
+
     // Measurements vector
     iDynTree::VectorDynSize m_measurements;
 
     // Human state
+    std::vector<std::string> m_humanModelJoints;
     iDynTree::JointPosDoubleArray m_jointsConfiguration;
     iDynTree::JointDOFsDoubleArray m_jointsVelocity;
 

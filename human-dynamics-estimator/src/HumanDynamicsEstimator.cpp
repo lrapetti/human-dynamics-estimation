@@ -8,6 +8,8 @@
 #include <iDynTree/yarp/YARPConversions.h>
 #include <yarp/os/LogStream.h> 
 
+#include <rtb/Filter/StateSpaceFilter.h>
+
 #include <chrono>
 #include <iostream>
 #include <map>
@@ -143,10 +145,24 @@ bool HumanDynamicsEstimator::configure(yarp::os::ResourceFinder &rf)
     const iDynTree::Model& humanModel = modelLoader.model();
     
 
+    m_humanModelJoints.resize(humanModel.getNrOfJoints());
     m_jointsConfiguration.resize(humanModel);
     m_jointsVelocity.resize(humanModel);
 
+    for (unsigned k = 0; k < humanModel.getNrOfJoints(); ++k) {
+        m_humanModelJoints.at(k) = humanModel.getJointName(k);
+    }
+
     std::string base = rf.find("baseLink").asString();      // base for the model
+
+    /*
+    * ------Create a filter for each DoF in the model
+    */
+//    m_ssFilters.resize(humanModel.getNrOfJoints());
+    for (unsigned j = 0; j < humanModel.getNrOfJoints(); ++j) {
+        m_ssFilters.push_back(rtb::Filter::StateSpaceFilter<double>());
+        m_ssFilters.at(j).filter(0.0, 0.0, 50);
+    }
 
     /*
      * ------Model sensors initialization
@@ -215,6 +231,7 @@ bool HumanDynamicsEstimator::configure(yarp::os::ResourceFinder &rf)
             continue;
         }
         m_inputOutputMapping.inputMeasurements.insert(BerdySensorsInputMap::value_type(key, sensor.range));
+        // yWarning("Sensor of id[type]: %s[%d].", sensor.id.c_str(), sensor.type);
     }
 
     // Resize priors and set them to identity.
@@ -396,10 +413,9 @@ bool HumanDynamicsEstimator::updateModule()
         return false;
     }
 
-    // Read human state
     m_measurements.zero();
-    // Read forces
 
+    // Read forces
     human::HumanForces *forcesReading = m_humanForcesPort.read(false);
     if (forcesReading) {
         for (auto &force6D : forcesReading->forces) {
@@ -420,12 +436,33 @@ bool HumanDynamicsEstimator::updateModule()
         }
     }
 
-
-    //TODO: fill y with measurements from ACCELEROMETER, GYROSCOPE and DOF_ACCELERATION.
+    //TODO: fill y with measurements from GYROSCOPES and ACCELEROMETERS
     // At this stage they are 0!
 
     // Now update the measurements vector
 
+    // Fill y with DOF_ACCELERATIONS
+    yarp::os::SystemClock time;
+    double sysTime_ms = time.now()/1000.0;
+    for (unsigned jIx = 0; jIx < m_humanModelJoints.size(); ++jIx) {
+//        yError("human model joint name, %s", m_humanModelJoints.at(jIx).c_str());
+//        yError("time val, %f", time.nowSystem());
+//        yError("joint velocity val, %f", m_jointsVelocity.getVal(jIx));
+
+        // TODO: check the cutoff frequency - max samplingTime/2
+        double filteredVel = m_ssFilters.at(jIx).filter(m_jointsVelocity.getVal(jIx), sysTime_ms, 50);
+//        yError("joint velocity filtered val, %f", filteredVel);
+        double jAccel = m_ssFilters.at(jIx).getFilteredFirstDerivative();
+//        yError("joint acceleration val, %f", jAccel);
+        SensorKey key = { iDynTree::DOF_ACCELERATION_SENSOR, m_humanModelJoints.at(jIx)};
+        BerdySensorsInputMap::const_iterator found = m_inputOutputMapping.inputMeasurements.find(key);
+        if (found == m_inputOutputMapping.inputMeasurements.end()
+            || found->second.size != 1) {
+            yError("Applied joint %s of joint Accelerations not found or joint acceleration does not contain 1 element", m_humanModelJoints.at(jIx).c_str());
+            continue;
+        }
+        m_measurements(found->second.offset) = jAccel;
+    }
 
     // and the state vector
 
