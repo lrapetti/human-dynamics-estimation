@@ -6,6 +6,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # set(CMAKE_CXX_STANDARD 11)
 
 ## Find packages
+find_package(YARP_experimental REQUIRED)
 find_package(Filter REQUIRED)
 
 # Generate thrift files  
@@ -39,6 +40,7 @@ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${EIGEN3_INCLUDE_DIR} 
 target_link_libraries(${PROJECT_NAME} human-dynamics-estimator-data
                                       human-forces-provider-data 
                                       human-state-provider-data
+                                      YARP::yarp_experimental
                                       YARP::YARP_OS
                                       YARP::YARP_init
                                       YARP::YARP_sig

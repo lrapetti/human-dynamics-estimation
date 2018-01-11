@@ -10,6 +10,9 @@
 
 #include <rtb/Filter/StateSpaceFilter.h>
 
+#include <yarp/dev/IIMUFrameProvider.h>
+#include <yarp/dev/IXsensMVNInterface.h>
+
 #include <chrono>
 #include <iostream>
 #include <map>
@@ -55,6 +58,43 @@ bool HumanDynamicsEstimator::configure(yarp::os::ResourceFinder &rf)
     falseValue.fromString("false");
     bool autoconnect = rf.check("autoconnect", falseValue, "Checking autoconnect option").asBool();
 
+    // Open IIMUFrameProvider device
+    bool playbackMode = rf.check("playback", falseValue, "Checking playback mode").asBool();
+
+    //Open the IFrameProvider device
+    std::string remote = rf.check("xsens_remote_name", yarp::os::Value("/xsens"), "Checking xsens driver port prefix").asString();
+    std::string local = rf.check("xsens_local_name", yarp::os::Value("/" + moduleName + "/xsens"), "Checking xsens local port prefix").asString();
+
+    yarp::os::Property sensorsDriverOptions;
+    if (playbackMode) {
+        sensorsDriverOptions.put("device", "xsens_mvn_remote_light");
+        sensorsDriverOptions.put("remote", remote);
+        sensorsDriverOptions.put("local", local);
+        sensorsDriverOptions.put("segments", rf.find("segments"));
+        sensorsDriverOptions.put("autoconnect", "false");
+    }
+    else {
+        sensorsDriverOptions.put("device", "xsens_mvn_remote");
+        sensorsDriverOptions.put("remote", remote);
+        sensorsDriverOptions.put("local", local);
+    }
+
+    if (!m_sensorsDriver.open(sensorsDriverOptions)) {
+        yError("Could not create connection to sensors driver");
+        return false;
+    }
+
+    if (!m_sensorsDriver.view(m_imuFrameProvider) || !m_imuFrameProvider) {
+        yError("Specified driver does not support IMUFrameProvider interface");
+        close();
+        return false;
+    }
+
+    if (!m_sensorsDriver.view(m_imuFrameProviderTimed) || !m_imuFrameProviderTimed) {
+        yError("Specified driver does not support PreciselyTimed interface");
+        close();
+        return false;
+    }
     /*
      * ------Open a port:i for the human joint configuration and forces
      */
@@ -106,10 +146,23 @@ bool HumanDynamicsEstimator::configure(yarp::os::ResourceFinder &rf)
             return false;
         }
     }
-    
+
+    /*
+     * --------Resize buffers for sensors data
+     */
+
+    // Resize internal data
+    // 1) data of size # of sensors (i.e. input data)
+    std::vector<yarp::experimental::dev::IMUFrameReference> imu_segments = m_imuFrameProvider->IMUFrames();
+    m_sensors_buffers.appliedToLinks = imu_segments;
+    m_sensors_buffers.imuLinearAccelerations.resize(imu_segments.size());
+    for (unsigned index = 0; index < imu_segments.size(); ++index) {
+        m_sensors_buffers.imuLinearAccelerations[index].resize(3, 0.0);
+    }
+
     /*
      * ------Human model loading 
-     */  
+     */
     yarp::os::Value defaultOffline; defaultOffline.fromString("true");
     bool offline = rf.check("playback", defaultOffline, "Checking playback mode").asBool();
     
@@ -439,7 +492,33 @@ bool HumanDynamicsEstimator::updateModule()
     //TODO: fill y with measurements from GYROSCOPES and ACCELEROMETERS
     // At this stage they are 0!
 
+    // Fill y with measurements from ACCELEROMETERS
+
+    // Read imu sensors data
+    if (!m_imuFrameProvider) return false;
+
+    // Read goes to buffers
+    yarp::experimental::dev::IIMUFrameProviderStatus status = m_imuFrameProvider->getIMUFrameLinearAccelerations(m_sensors_buffers.imuLinearAccelerations);
+    if (status != yarp::experimental::dev::IIMUFrameProviderStatusOK) {
+        //TODO: instead of return true we should handle timeout
+        yWarning("Timeout in reading imu sensors data");
+        return true;
+    }
+
     // Now update the measurements vector
+    for (unsigned ix = 0; ix < m_sensors_buffers.appliedToLinks.size();++ix){
+        SensorKey key = { iDynTree::ACCELEROMETER_SENSOR, m_sensors_buffers.appliedToLinks[ix].IMUframeName + "_accelerometer" };
+        BerdySensorsInputMap::const_iterator found = m_inputOutputMapping.inputMeasurements.find(key);
+        if (found == m_inputOutputMapping.inputMeasurements.end()
+            || found->second.size != 3) {
+            yError("Applied link %s of imu sensor acceleration measurements not found or imu sensor acceleration does not contain 3 elements", m_sensors_buffers.appliedToLinks[ix].IMUframeName.c_str());
+            continue;
+        }
+
+        m_measurements(found->second.offset) = m_sensors_buffers.imuLinearAccelerations[ix][0];
+        m_measurements(found->second.offset + 1) = m_sensors_buffers.imuLinearAccelerations[ix][1];
+        m_measurements(found->second.offset + 2) = m_sensors_buffers.imuLinearAccelerations[ix][2];
+    }
 
     // Fill y with DOF_ACCELERATIONS
     yarp::os::SystemClock time;
