@@ -26,6 +26,7 @@
 #include <yarp/os/Publisher.h>
 #include <yarp/os/RFModule.h>
 
+#include <algorithm>
 #include <limits.h>
 #include <vector>
 
@@ -36,11 +37,30 @@ inline bool parsePositionVector(const yarp::os::Value& ini, iDynTree::Position& 
 inline bool parseFrameListOption(const yarp::os::Value& option,
                                  std::vector<std::string>& parsedSegments);
 
+enum TF
+{
+    HumanEntry = 0,
+    RobotEntry = 1
+};
+
+struct HumanJointStatePublisherResources
+{
+    size_t counter = 0;
+    sensor_msgs_JointState message;
+    yarp::os::Publisher<sensor_msgs_JointState> publisher;
+};
+
+struct BasePosePublisherResources
+{
+    size_t counter = 0;
+    tf2_msgs_TFMessage message;
+    std::shared_ptr<yarp::os::Publisher<tf2_msgs_TFMessage>> publisher = nullptr;
+};
+
 class HumanRobotPose::impl
 {
 public:
     double period = 0.1;
-    size_t counter = 0;
     yarp::os::Mutex mutex;
     bool autoconnect = false;
 
@@ -57,6 +77,7 @@ public:
     bool enableRobot = false;
     iDynTree::JointPosDoubleArray robotJointsPosition;
     iDynTree::JointPosDoubleArray robotJointsVelocity;
+    yarp::dev::PolyDriver remoteControlBoardRemapper;
     yarp::dev::IEncoders* iEncoders = nullptr;
     iDynTree::KinDynComputations robotKinDynComp;
 
@@ -67,11 +88,6 @@ public:
     typedef std::pair<std::string, std::string> Contact;
     Contact contact1;
     Contact contact2;
-    enum
-    {
-        HUMAN = 0,
-        ROBOT = 1
-    };
 
     // Method #1, #2, #3 selection
     bool useSkin = false;
@@ -83,14 +99,10 @@ public:
     iDynTree::Transform humanFrame_H_robotFrame;
 
     // ROS Publishers
-    yarp::os::Publisher<sensor_msgs_JointState> publisher_jointState;
-    yarp::os::Publisher<tf2_msgs_TFMessage> publisher_tfHuman;
-    yarp::os::Publisher<tf2_msgs_TFMessage> publisher_tfRobot;
-
-    // ROS Messages
-    sensor_msgs_JointState jointState;
-    tf2_msgs_TFMessage tfHuman;
-    tf2_msgs_TFMessage tfRobot;
+    std::string tfPrefix;
+    std::unique_ptr<yarp::os::Node> node;
+    HumanJointStatePublisherResources humanJointStateROS;
+    BasePosePublisherResources basePoseROS;
 
     // Methods for computing the robot pose
     iDynTree::Transform computeRobotPose_withSkin();
@@ -175,10 +187,6 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
         return false;
     }
 
-    //    if (!(rf.check("fixedFrameRobot") && rf.find("fixedFrameRobot").isString())) {
-    //        yError() << LogPrefix << "Parameter 'fixedFrameRobot' missing or invalid";
-    //    }
-
     // MODE #1 PARAMETERS (SKIN)
     // =========================
 
@@ -237,6 +245,10 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
 
     // ROS TOPICS
     // ==========
+    if (!(rf.check("tfPrefix") && rf.find("tfPrefix").isString())) {
+        yError() << LogPrefix << "Parameter 'tfPrefix' missing or invalid";
+        return false;
+    }
 
     if (!(rf.check("nodeName") && rf.find("nodeName").isString())) {
         yError() << LogPrefix << "Parameter 'nodeName' missing or invalid";
@@ -245,16 +257,6 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
 
     if (!(rf.check("humanJointsTopic") && rf.find("humanJointsTopic").isString())) {
         yError() << LogPrefix << "Parameter 'humanJointsTopic' missing or invalid";
-        return false;
-    }
-
-    if (!(rf.check("humanPoseTopic") && rf.find("humanPoseTopic").isString())) {
-        yError() << LogPrefix << "Parameter 'humanPoseTopic' missing or invalid";
-        return false;
-    }
-
-    if (!(rf.check("robotPoseTopic") && rf.find("robotPoseTopic").isString())) {
-        yError() << LogPrefix << "Parameter 'robotPoseTopic' missing or invalid";
         return false;
     }
 
@@ -267,15 +269,14 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     pImpl->autoconnect = rf.find("autoconnect").asBool();
 
     // HUMAN PARAMETERS
-    const std::string humanModel = rf.find("humanModel").asString();
+    const std::string humanModelName = rf.find("humanModel").asString();
     const std::string humanJointsListIni = rf.find("humanJointsListIni").asString();
     pImpl->humanStateRemotePort = rf.find("humanStatePort").asString();
 
     // ROBOT PARAMETERS
     pImpl->enableRobot = rf.find("enableRobot").asBool();
     const std::string robotName = rf.find("robotName").asString();
-    const std::string robotModel = rf.find("robotModel").asString();
-    //    const std::string fixedFrameRobot = rf.find("fixedFrameRobot").asString();
+    const std::string robotModelName = rf.find("robotModel").asString();
 
     // MODE #1 PARAMETERS
     pImpl->useSkin = rf.find("useSkin").asBool();
@@ -313,10 +314,9 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
                        robotContactFrames->get(1).asString()};
 
     // ROS TOPICS
+    pImpl->tfPrefix = rf.find("tfPrefix").asString();
     const std::string nodeName = rf.find("nodeName").asString();
     const std::string humanJointsTopic = rf.find("humanJointsTopic").asString();
-    const std::string humanPoseTopic = rf.find("humanPoseTopic").asString();
-    const std::string robotPoseTopic = rf.find("robotPoseTopic").asString();
 
     // =====================
     // INITIALIZE YARP PORTS
@@ -350,7 +350,6 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
 
     const std::vector<std::string> robotControlledJoints = {
         // torso
-        "torso_pitch",
         "torso_pitch",
         "torso_roll",
         "torso_yaw",
@@ -412,15 +411,15 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
         yarp::os::Property& remoteCBOpts = options.addGroup("REMOTE_CONTROLBOARD_OPTIONS");
         remoteCBOpts.put("writeStrict", "on");
 
-        yarp::dev::PolyDriver remoteControlBoardRemapper;
-        if (!remoteControlBoardRemapper.open(options) && !remoteControlBoardRemapper.isValid()) {
+        if (!pImpl->remoteControlBoardRemapper.open(options)
+            && !pImpl->remoteControlBoardRemapper.isValid()) {
             yError() << LogPrefix
                      << "Failed to open the RemoteControlBoardRemapper with the options passed";
             return false;
         }
 
         // Access the interface
-        if (!remoteControlBoardRemapper.view(pImpl->iEncoders)) {
+        if (!pImpl->remoteControlBoardRemapper.view(pImpl->iEncoders)) {
             yError() << LogPrefix
                      << "Failed to get the iEncoders interface from the RemoteControlBoardRemapper";
             return false;
@@ -445,37 +444,71 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     }
 
     // Parse the ini file containing the human joints
-    std::vector<std::string> humanJointList;
-    if (!parseFrameListOption(config.find("jointList"), humanJointList)) {
+    std::vector<std::string> humanJointListFromConf;
+    if (!parseFrameListOption(config.find("jointList"), humanJointListFromConf)) {
         yError() << LogPrefix << "Failed parsing the joint list read from "
                  << humanJointsListIniPath;
         return false;
     }
 
     // Load the urdf
-    std::string humanModelPath = rf.findFile(humanModel.c_str());
-    if (humanModel.empty()) {
-        yError() << LogPrefix << "ResourceFinder couldn't find urdf file " + humanModel;
+    std::string humanModelPath = rf.findFile(humanModelName.c_str());
+    if (humanModelPath.empty()) {
+        yError() << LogPrefix << "ResourceFinder couldn't find urdf file " + humanModelName;
         return false;
     }
 
     iDynTree::ModelLoader humanMdlLoader;
-    if (!humanMdlLoader.loadReducedModelFromFile(humanModelPath, humanJointList)) {
+    if (!humanMdlLoader.loadReducedModelFromFile(humanModelPath, humanJointListFromConf)) {
         yError() << LogPrefix << "Failed to load reduced human model from file";
         return false;
     }
 
-    pImpl->humanKinDynComp.loadRobotModel(humanMdlLoader.model());
+    const iDynTree::Model& humanModel = humanMdlLoader.model();
+    pImpl->humanKinDynComp.loadRobotModel(humanModel);
     pImpl->humanKinDynComp.setFrameVelocityRepresentation(iDynTree::MIXED_REPRESENTATION);
+
+    // Read the joints from the URDF
+    std::vector<std::string> humanJointListURDF;
+    humanJointListURDF.reserve(humanModel.getNrOfJoints());
+    for (iDynTree::JointIndex jointIdx = 0; jointIdx < humanModel.getNrOfJoints(); ++jointIdx) {
+
+        // Get the joint name from the index
+        std::string jointName = humanModel.getJointName(jointIdx);
+
+        // If it is not present in the configuration, raise an error.
+        // This logic supports reduced models.
+        if (std::find(humanJointListFromConf.begin(), humanJointListFromConf.end(), jointName)
+            == humanJointListFromConf.end()) {
+            yError() << "URDF joints and received joints do not match";
+            close();
+            return false;
+        }
+
+        // TODO
+        humanJointListURDF.push_back(jointName);
+        if ((humanJointListURDF[jointIdx].compare(humanJointListFromConf[jointIdx]))) {
+            yError() << "URDF joints is different from the order of the received joints";
+            close();
+            return false;
+        }
+    }
+
+    // Set the joints names already here
+    pImpl->humanJointStateROS.message.name.resize(humanJointListURDF.size());
+    pImpl->humanJointStateROS.message.header.frame_id = "ground";
+    for (unsigned jointIdx = 0; jointIdx < humanJointListURDF.size(); ++jointIdx) {
+        pImpl->humanJointStateROS.message.name[jointIdx] = humanJointListURDF[jointIdx];
+    }
 
     // ======================
     // INITIALIZE ROBOT MODEL
     // ======================
 
     if (pImpl->enableRobot) {
-        std::string robotModelPath = rf.findFile(robotModel.c_str());
-        if (robotModel.empty()) {
-            yError() << LogPrefix << "ResourceFinder couldn't find urdf file " + robotModel;
+        std::string robotModelPath = rf.findFile(robotModelName.c_str());
+        if (robotModelName.empty()) {
+            yError() << LogPrefix << "ResourceFinder couldn't find urdf file " + robotModelName;
             return false;
         }
 
@@ -493,32 +526,42 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     // INITIALIZE ROS PUBLISHERS
     // =========================
 
-    // Initialize the node
-    yarp::os::Node node(nodeName);
+    pImpl->node = std::unique_ptr<yarp::os::Node>(new yarp::os::Node(nodeName));
 
-    // Initialize human publishers and topics
-    pImpl->publisher_tfHuman.topic(humanPoseTopic);
-    pImpl->publisher_jointState.topic(humanJointsTopic);
-    pImpl->tfHuman.transforms.resize(1);
+    // Initialize ROS resource for human base pose
+    pImpl->basePoseROS.publisher = std::make_shared<yarp::os::Publisher<tf2_msgs_TFMessage>>("/tf");
+    pImpl->basePoseROS.message.transforms.resize(1);
 
+    // Initialize ROS resource for human joints position
+    const unsigned humanDofs = pImpl->humanKinDynComp.getNrOfDegreesOfFreedom();
+    pImpl->humanJointStateROS.publisher.topic(humanJointsTopic);
+    pImpl->humanJointStateROS.message.position.resize(humanDofs, 0);
+    pImpl->humanJointStateROS.message.velocity.resize(humanDofs, 0);
+    pImpl->humanJointStateROS.message.effort.resize(humanDofs, 0);
+
+    // Initialize ROS resource for robot base pose
     if (pImpl->enableRobot) {
-        // Initialize human publishers and topics
-        pImpl->publisher_tfRobot.topic(robotPoseTopic);
-        pImpl->tfRobot.transforms.resize(1);
+        pImpl->basePoseROS.message.transforms.resize(2);
     }
 
     // ==========================
     // INITIALIZE OTHER RESOURCES
     // ==========================
 
-    const unsigned humanDofs = pImpl->humanKinDynComp.getNrOfDegreesOfFreedom();
-    pImpl->humanJointsPosition.reserve(humanDofs);
+    // Buffer for human position
+    pImpl->humanJointsPosition.resize(humanDofs);
+    pImpl->humanJointsPosition.zero();
+
+    // Buffer for human velocity
     pImpl->humanJointsVelocity.resize(humanDofs);
     pImpl->humanJointsVelocity.zero();
 
     if (pImpl->enableRobot) {
         const unsigned robotDofs = pImpl->robotKinDynComp.getNrOfDegreesOfFreedom();
-        pImpl->robotJointsPosition.reserve(robotDofs);
+        // Buffer for robot position
+        pImpl->robotJointsPosition.resize(robotDofs);
+        pImpl->robotJointsPosition.zero();
+        // Buffer for robot velocity
         pImpl->robotJointsVelocity.resize(robotDofs);
         pImpl->robotJointsVelocity.zero();
     }
@@ -532,9 +575,9 @@ bool HumanRobotPose::updateModule()
     if (!pImpl->autoconnect) {
         if (!yarp::os::Network::isConnected(pImpl->humanStateRemotePort,
                                             pImpl->humanStatePort.getName())) {
-            yDebug() << "Ports " << pImpl->humanStateRemotePort << " and "
-                     << pImpl->humanStatePort.getName()
-                     << " are not connected. Waiting manual connection.";
+            yInfo() << LogPrefix << "Ports " << pImpl->humanStateRemotePort << " and "
+                    << pImpl->humanStatePort.getName()
+                    << " are not connected. Waiting manual connection.";
             return true;
         }
         if (pImpl->enableRobot) {
@@ -545,17 +588,26 @@ bool HumanRobotPose::updateModule()
     // READ AND UPDATE HUMAN JOINTS CONFIGURATION AND POSE
     // ===================================================
 
-    pImpl->humanStateData = pImpl->humanStatePort.read(false);
-    if (pImpl->humanStateData
-        && !iDynTree::toiDynTree(pImpl->humanStateData->positions, pImpl->humanJointsPosition)) {
+    // The State provider is slower than this module. Use old data
+    // if the reading is not available.
+    auto newHumanStateData = pImpl->humanStatePort.read(/*shouldWait=*/false);
+    if (newHumanStateData) {
+        pImpl->humanStateData = newHumanStateData;
+    }
+
+    if (!pImpl->humanStateData) {
         yError() << LogPrefix << "Failed to read the human state data";
         return false;
     }
 
-    if (pImpl->enableRobot) {
-        pImpl->humanKinDynComp.setRobotState(
-            pImpl->humanJointsPosition, pImpl->humanJointsVelocity, pImpl->gravity);
+    if (!iDynTree::toiDynTree(pImpl->humanStateData->positions, pImpl->humanJointsPosition)) {
+        yError() << LogPrefix << "Failed to parse the human state data";
+        return false;
     }
+
+    // Update KinDynKinematics
+    pImpl->humanKinDynComp.setRobotState(
+        pImpl->humanJointsPosition, pImpl->humanJointsVelocity, pImpl->gravity);
 
     // Store the world_H_humanBase transform. It is required later.
     // Rotation
@@ -567,11 +619,9 @@ bool HumanRobotPose::updateModule()
     pImpl->world_H_humanBase.setRotation(
         iDynTree::Rotation::RotationFromQuaternion(pelvisQuaternion));
     // Translation
-    pImpl->world_H_humanBase.setPosition({
-        pImpl->humanStateData->baseOriginWRTGlobal.x,
-        pImpl->humanStateData->baseOriginWRTGlobal.y,
-        pImpl->humanStateData->baseOriginWRTGlobal.z,
-    });
+    pImpl->world_H_humanBase.setPosition({pImpl->humanStateData->baseOriginWRTGlobal.x,
+                                          pImpl->humanStateData->baseOriginWRTGlobal.y,
+                                          pImpl->humanStateData->baseOriginWRTGlobal.z});
 
     // ==========================================
     // READ AND UPDATE ROBOT JOINTS CONFIGURATION
@@ -619,38 +669,41 @@ bool HumanRobotPose::updateModule()
     // WRITE TO ROS TOPICS
     // ===================
 
-    // Prepare the publishers.
-    // These objects are created with new every loop iteration. Instead of writing data directly
-    // to them, which will cause reallocation, private pre-dimensioned variables will be used.
-    tf2_msgs_TFMessage& tfMsgHuman = pImpl->publisher_tfHuman.prepare();
-    sensor_msgs_JointState& jointStateMsg = pImpl->publisher_jointState.prepare();
+    yarp::os::LockGuard lock(pImpl->mutex);
 
     // Initialize common metadata
-    pImpl->counter++;
-    const TickTime currentTime = normalizeSecNSec(yarp::os::Time::now());
+    //    const TickTime currentTime = normalizeSecNSec(yarp::os::Time::now());
 
     // HUMAN JOINTS POSITION
     // =====================
 
-    pImpl->jointState.header.stamp = currentTime;
-    for (size_t index = 0; index < pImpl->jointState.position.size(); ++index) {
-        pImpl->jointState.position[index] = pImpl->humanStateData->positions[index];
+    // Get the message buffer to send
+    sensor_msgs_JointState& jointStateMsg = pImpl->humanJointStateROS.publisher.prepare();
+
+    pImpl->humanJointStateROS.message.header.seq = pImpl->humanJointStateROS.counter++;
+    pImpl->humanJointStateROS.message.header.stamp = normalizeSecNSec(yarp::os::Time::now());
+    for (size_t index = 0; index < jointStateMsg.position.size(); ++index) {
+        pImpl->humanJointStateROS.message.position[index] = pImpl->humanStateData->positions[index];
     }
 
-    jointStateMsg = pImpl->jointState;
-    pImpl->publisher_jointState.write();
+    jointStateMsg = pImpl->humanJointStateROS.message;
+    pImpl->humanJointStateROS.publisher.write();
 
     // HUMAN TRANSFORM world_HH_base
     // =============================
 
-    auto humanTransform = pImpl->tfHuman.transforms.front();
-    const auto humanStateData = pImpl->humanStateData;
+    // Get the message to send
+    tf2_msgs_TFMessage& tfMsgHuman = pImpl->basePoseROS.publisher->prepare();
+
+    // Get the buffer and the original data
+    auto& humanTransform = pImpl->basePoseROS.message.transforms[HumanEntry];
+    const auto& humanStateData = pImpl->humanStateData;
 
     // Metadata
-    humanTransform.header.seq = pImpl->counter;
-    humanTransform.header.stamp = currentTime;
+    humanTransform.header.seq = pImpl->basePoseROS.counter++;
+    humanTransform.header.stamp = normalizeSecNSec(yarp::os::Time::now());
     humanTransform.header.frame_id = "ground";
-    humanTransform.child_frame_id = "Pelvis";
+    humanTransform.child_frame_id = pImpl->tfPrefix + "/Pelvis";
 
     // Translation
     humanTransform.transform.translation.x = humanStateData->baseOriginWRTGlobal.x;
@@ -663,24 +716,26 @@ bool HumanRobotPose::updateModule()
     humanTransform.transform.rotation.z = humanStateData->baseOrientationWRTGlobal.imaginary.z;
     humanTransform.transform.rotation.w = humanStateData->baseOrientationWRTGlobal.w;
 
-    // Publish the transform
-    tfMsgHuman = pImpl->tfHuman;
-    pImpl->publisher_tfHuman.write();
+    // Store the transform
+    tfMsgHuman = pImpl->basePoseROS.message;
 
     // ROBOT TRANSFORM world_HR_base
     // =============================
 
     if (pImpl->enableRobot) {
-        tf2_msgs_TFMessage& tfMsgRobot = pImpl->publisher_tfHuman.prepare();
+
+        // Get the message to send
+        tf2_msgs_TFMessage& tfMsgRobot = pImpl->basePoseROS.publisher->prepare();
+
+        // Get the buffer
+        auto& robotTransform = pImpl->basePoseROS.message.transforms[RobotEntry];
 
         iDynTree::Position world_P_robotBase = robotPose.getPosition();
         iDynTree::Vector4 world_R_robotBase = robotPose.getRotation().asQuaternion();
 
-        auto robotTransform = pImpl->tfRobot.transforms.front();
-
         // Metadata
-        robotTransform.header.seq = pImpl->counter;
-        robotTransform.header.stamp = currentTime;
+        robotTransform.header.seq = pImpl->basePoseROS.counter++;
+        robotTransform.header.stamp = normalizeSecNSec(yarp::os::Time::now());
         robotTransform.header.frame_id = "ground";
         robotTransform.child_frame_id = "root_link";
 
@@ -695,10 +750,12 @@ bool HumanRobotPose::updateModule()
         robotTransform.transform.rotation.z = world_R_robotBase(3);
         robotTransform.transform.rotation.w = world_R_robotBase(0);
 
-        // Publish the transform
-        tfMsgRobot = pImpl->tfRobot;
-        pImpl->publisher_tfRobot.write();
+        // Store the transform
+        tfMsgRobot = pImpl->basePoseROS.message;
     }
+
+    // Send the transform(s)
+    pImpl->basePoseROS.publisher->write();
 
     return true;
 }
@@ -733,13 +790,15 @@ bool HumanRobotPose::close()
     pImpl->humanStatePort.close();
 
     // Stop ROS publishers
-    pImpl->publisher_tfRobot.interrupt();
-    pImpl->publisher_tfRobot.close();
-    pImpl->publisher_tfHuman.interrupt();
-    pImpl->publisher_tfHuman.close();
-    pImpl->publisher_jointState.interrupt();
-    pImpl->publisher_jointState.close();
 
+    pImpl->basePoseROS.publisher->interrupt();
+    pImpl->basePoseROS.publisher->close();
+
+    pImpl->humanJointStateROS.publisher.interrupt();
+    pImpl->humanJointStateROS.publisher.close();
+
+    // Interrupt the node
+    pImpl->node->interrupt();
     return true;
 }
 
