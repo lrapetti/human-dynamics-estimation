@@ -322,13 +322,6 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     // INITIALIZE YARP PORTS
     // =====================
 
-    // Initialize the network
-    yarp::os::Network::init();
-    if (!yarp::os::Network::initialized() || !yarp::os::Network::checkNetwork(5.0)) {
-        yError() << LogPrefix << "YARP server wasn't found active";
-        return false;
-    }
-
     // Open ports
     const std::string humanStateInputPortName = "/" + getName() + "/humanState:i";
     if (!pImpl->humanStatePort.open(humanStateInputPortName)) {
@@ -804,6 +797,7 @@ bool HumanRobotPose::close()
 
     // Interrupt the node
     pImpl->node->interrupt();
+
     return true;
 }
 

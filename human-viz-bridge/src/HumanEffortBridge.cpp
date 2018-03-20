@@ -14,6 +14,7 @@
 #include <yarp/sig/Vector.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits.h>
 #include <memory>
 #include <string>
@@ -179,7 +180,7 @@ public:
                 std::make_shared<yarp::os::Publisher<sensor_msgs_Temperature>>();
             ok = ok
                  && jointEffortData.publisher->topic(topicPrefix + "/"
-                                                     + jointEffortData.parentLinkName);
+                                                     + jointEffortData.sphericalJointName);
             // Ros message
             jointEffortData.message.header.frame_id =
                 tfPrefix + "/" + jointEffortData.parentLinkName;
@@ -195,15 +196,20 @@ public:
         }
 
         // Get the indices of the fake model joints that compose the spherical joint specified in
-        // the configuration. The logic is that the fake joints name are: sphericalJointName +
-        // postfix
-        //                                        e.g: RightUpperArm + _f1
+        // the configuration. The logic is that the fake joints name are:
+        //      sphericalJointName + postfix
+        //
+        // e.g: RightUpperArm + _f1
 
         // Get all joints from the urdf model
         std::vector<std::string> URDFjoints(humanModel.getNrOfJoints());
         for (iDynTree::JointIndex jointIdx = 0; jointIdx < URDFjoints.size(); ++jointIdx) {
             URDFjoints[jointIdx] = humanModel.getJointName(jointIdx);
         }
+
+        // TODO: for some reason the joints are serialized into the human::HumanDynamics class
+        //       in alphabetical order, not following iDynTree indices
+        sort(URDFjoints.begin(), URDFjoints.end());
 
         // Check all the occurences of sphericalJointName* in the urdf model joints
         for (unsigned jointIdx = 0; jointIdx < URDFjoints.size(); ++jointIdx) {
@@ -245,13 +251,16 @@ public:
 
     bool close() override
     {
+        // Close yarp ports
         m_humanDynamicsDataPort.close();
 
+        // Stop ROS publishers
         for (auto& jointEffortData : m_modelEffortData) {
             jointEffortData.publisher->interrupt();
             jointEffortData.publisher->close();
         }
 
+        // Interrupt the node
         m_node->interrupt();
 
         return true;
@@ -270,9 +279,9 @@ public:
             // the effortData.jointName revolute joint
             double effortTmp = 0;
             for (const auto& modelFakeJointIdx : jointEffortData.fakeJointsIndices) {
-                effortTmp +=
-                    std::abs(humanDynamicsData.jointVariables[modelFakeJointIdx].torque[0]);
+                effortTmp += pow(humanDynamicsData.jointVariables[modelFakeJointIdx].torque[0], 2);
             }
+            effortTmp = sqrt(effortTmp);
 
             jointEffortData.message.temperature = effortTmp;
 
