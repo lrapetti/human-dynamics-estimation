@@ -130,12 +130,12 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     if (!rf.check("name")) {
         yError() << LogPrefix << "Module name is wrong or missing";
     }
-    std::string moduleName = rf.find("name").asString();
+    const std::string moduleName = rf.find("name").asString();
     setName(moduleName.c_str());
     // Check that the name matches the module name in order to avoid
     // passing a wrong configuration file
     if (moduleName != "human-robot-pose") {
-        yError() << "The moduleName parameter of the passed configuration is not human-robot-pose.";
+        yError() << "The moduleName parameter of the passed configuration is not human-robot-pose";
         return false;
     }
 
@@ -451,13 +451,14 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
         return false;
     }
 
-    // Load the urdf
+    // Find the urdf file
     std::string humanModelPath = rf.findFile(humanModelName.c_str());
     if (humanModelPath.empty()) {
         yError() << LogPrefix << "ResourceFinder couldn't find urdf file " + humanModelName;
         return false;
     }
 
+    // Load the urdf model
     iDynTree::ModelLoader humanMdlLoader;
     if (!humanMdlLoader.loadReducedModelFromFile(humanModelPath, humanJointListFromConf)) {
         yError() << LogPrefix << "Failed to load reduced human model from file";
@@ -474,19 +475,23 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     for (iDynTree::JointIndex jointIdx = 0; jointIdx < humanModel.getNrOfJoints(); ++jointIdx) {
 
         // Get the joint name from the index
-        std::string jointName = humanModel.getJointName(jointIdx);
+        std::string jointNameFromUrdf = humanModel.getJointName(jointIdx);
 
         // If it is not present in the configuration, raise an error.
         // This logic supports reduced models.
-        if (std::find(humanJointListFromConf.begin(), humanJointListFromConf.end(), jointName)
+        if (std::find(
+                humanJointListFromConf.begin(), humanJointListFromConf.end(), jointNameFromUrdf)
             == humanJointListFromConf.end()) {
             yError() << "URDF joints and received joints do not match";
             close();
             return false;
         }
 
-        // TODO
-        humanJointListURDF.push_back(jointName);
+        // Store it in the vector
+        humanJointListURDF.push_back(jointNameFromUrdf);
+
+        // Check if the joint order of the configuration file matches the order of the urdf.
+        // TODO: why do we need this? Serialization?
         if ((humanJointListURDF[jointIdx].compare(humanJointListFromConf[jointIdx]))) {
             yError() << "URDF joints is different from the order of the received joints";
             close();
@@ -532,17 +537,17 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     pImpl->basePoseROS.publisher = std::make_shared<yarp::os::Publisher<tf2_msgs_TFMessage>>("/tf");
     pImpl->basePoseROS.message.transforms.resize(1);
 
+    // Initialize ROS resource for robot base pose
+    if (pImpl->enableRobot) {
+        pImpl->basePoseROS.message.transforms.resize(2);
+    }
+
     // Initialize ROS resource for human joints position
     const unsigned humanDofs = pImpl->humanKinDynComp.getNrOfDegreesOfFreedom();
     pImpl->humanJointStateROS.publisher.topic(humanJointsTopic);
     pImpl->humanJointStateROS.message.position.resize(humanDofs, 0);
     pImpl->humanJointStateROS.message.velocity.resize(humanDofs, 0);
     pImpl->humanJointStateROS.message.effort.resize(humanDofs, 0);
-
-    // Initialize ROS resource for robot base pose
-    if (pImpl->enableRobot) {
-        pImpl->basePoseROS.message.transforms.resize(2);
-    }
 
     // ==========================
     // INITIALIZE OTHER RESOURCES
@@ -590,6 +595,7 @@ bool HumanRobotPose::updateModule()
 
     // The State provider is slower than this module. Use old data
     // if the reading is not available.
+    // TODO: switch to a callback on humanStatePort
     auto newHumanStateData = pImpl->humanStatePort.read(/*shouldWait=*/false);
     if (newHumanStateData) {
         pImpl->humanStateData = newHumanStateData;
@@ -790,7 +796,6 @@ bool HumanRobotPose::close()
     pImpl->humanStatePort.close();
 
     // Stop ROS publishers
-
     pImpl->basePoseROS.publisher->interrupt();
     pImpl->basePoseROS.publisher->close();
 

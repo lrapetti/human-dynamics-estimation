@@ -9,7 +9,7 @@
 
 int main(int argc, char* argv[])
 {
-    // YARP setting
+    // Initialize YARP network
     yarp::os::Network yarp;
     if (!yarp::os::Network::checkNetwork(5.0)) {
         yError() << " YARP server not available!";
@@ -23,11 +23,12 @@ int main(int argc, char* argv[])
     rf.setDefaultConfigFile("human-robot-pose.ini");
     rf.configure(argc, argv);
 
-    // Initialize the node
-    //    yarp::os::Node node("/myNode");
-
     // Configure the module
     HumanRobotPose module;
     module.runModule(rf);
-    return 0;
+
+    // Terminate YARP network
+    yarp::os::Network::fini();
+
+    return EXIT_SUCCESS;
 }
