@@ -8,6 +8,18 @@ Panels:
         - /Status1
         - /Grid1
         - /RobotModel2
+        - /Temperature1
+        - /Temperature2
+        - /Temperature3
+        - /Temperature4
+        - /Temperature5
+        - /Temperature6
+        - /Temperature7
+        - /Temperature8
+        - /Temperature9
+        - /Temperature10
+        - /Temperature11
+        - /Temperature12
         - /WrenchStamped1
         - /WrenchStamped2
         - /WrenchStamped3
@@ -35,7 +47,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: Temperature
 Visualization Manager:
   Class: ""
   Displays:
@@ -405,7 +417,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jLeftAnkle
+      Topic: /HumanEffortBridge/jLeftAnkle
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -435,7 +447,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jLeftElbow
+      Topic: /HumanEffortBridge/jLeftElbow
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -465,7 +477,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jLeftHip
+      Topic: /HumanEffortBridge/jLeftHip
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -495,7 +507,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jLeftKnee
+      Topic: /HumanEffortBridge/jLeftKnee
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -525,7 +537,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jLeftShoulder
+      Topic: /HumanEffortBridge/jLeftShoulder
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -555,7 +567,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jLeftWrist
+      Topic: /HumanEffortBridge/jLeftWrist
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -585,7 +597,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jRightAnkle
+      Topic: /HumanEffortBridge/jRightAnkle
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -615,7 +627,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jRightElbow
+      Topic: /HumanEffortBridge/jRightElbow
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -645,7 +657,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jRightHip
+      Topic: /HumanEffortBridge/jRightHip
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -675,7 +687,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jRightKnee
+      Topic: /HumanEffortBridge/jRightKnee
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -705,7 +717,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jRightShoulder
+      Topic: /HumanEffortBridge/jRightShoulder
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -735,7 +747,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.150000006
       Style: Spheres
-      Topic: /IKhuman/jRightWrist
+      Topic: /HumanEffortBridge/jRightWrist
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
@@ -802,6 +814,601 @@ Visualization Manager:
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        chest:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        head:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        imu_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_ankle_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_ankle_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_elbow_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_foot:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_foot_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_forearm_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_0:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_10:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_11:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_12:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_13:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_14:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_15:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_16:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_17:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_19:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_22:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_24:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_25:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_28:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_29:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_4:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_5:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_6:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_7:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_8:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_forearm_skin_9:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_hand:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_hand_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_hip_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_hip_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_hip_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_lower_leg:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_shoulder_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_shoulder_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_shoulder_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_sole:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_upper_arm:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_upper_leg:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        l_upper_leg_back_contact:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_upper_leg_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        l_wrist_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        neck_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        neck_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_ankle_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_ankle_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_elbow_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_foot:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_foot_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_forearm_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_0:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_10:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_11:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_12:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_13:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_14:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_15:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_16:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_17:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_19:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_22:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_24:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_25:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_28:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_29:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_4:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_5:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_6:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_7:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_8:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_forearm_skin_9:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_hand:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_hand_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_hip_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_hip_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_hip_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_lower_leg:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_lower_leg_skin_0:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_10:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_11:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_14:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_15:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_16:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_17:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_19:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_20:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_21:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_28:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_29:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_31:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_32:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_35:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_36:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_37:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_38:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_4:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_41:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_42:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_43:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_46:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_47:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_49:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_5:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_50:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_51:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_52:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_53:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_54:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_55:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_56:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_6:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_60:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_61:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_lower_leg_skin_9:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_shoulder_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_shoulder_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_shoulder_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_sole:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_upper_arm:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_upper_leg:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        r_upper_leg_back_contact:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_upper_leg_dh_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        r_wrist_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        root_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        torso_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        torso_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
       Name: RobotModel
       Robot Description: icub02/robot_description
       TF Prefix: ""
