@@ -249,18 +249,29 @@ public:
         return true;
     }
 
+    bool interruptModule() override {
+        // Interrupt yarp ports
+        m_humanDynamicsDataPort.interrupt();
+
+        // Interrupt ROS publishers
+        for (auto& jointEffortData : m_modelEffortData) {
+            jointEffortData.publisher->interrupt();
+        }
+
+        return true;
+    }
+
     bool close() override
     {
         // Close yarp ports
         m_humanDynamicsDataPort.close();
 
-        // Stop ROS publishers
+        // Close ROS publishers
         for (auto& jointEffortData : m_modelEffortData) {
-            jointEffortData.publisher->interrupt();
             jointEffortData.publisher->close();
         }
 
-        // Interrupt the node
+        // Close the node
         m_node->interrupt();
 
         return true;

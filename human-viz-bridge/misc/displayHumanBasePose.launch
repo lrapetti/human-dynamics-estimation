@@ -18,5 +18,6 @@
         <param name="robot_description" textfile="$(find human_viz_model)/urdf/iCubGenova02.urdf"  />
         <param name="use_gui" value="$(arg gui)"/>
         <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+        <param name="tf_prefix" value="icub02" type="str"/>
     </group>
 </launch>

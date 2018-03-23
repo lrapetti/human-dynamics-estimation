@@ -17,7 +17,9 @@ public:
     double getPeriod() override;
     bool configure(yarp::os::ResourceFinder& rf) override;
     bool updateModule() override;
+    bool interruptModule() override;
     bool close() override;
+    bool respond(const yarp::os::Bottle &command, yarp::os::Bottle &reply) override;
 };
 
 #endif

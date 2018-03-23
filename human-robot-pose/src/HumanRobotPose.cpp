@@ -1,10 +1,12 @@
 #include "HumanRobotPose.h"
 
 #include "TickTime.h"
+#include "sensor_msgs_Temperature.h"
 #include "sensor_msgs_JointState.h"
 #include "tf2_msgs_TFMessage.h"
 #include "thrifts/HumanState.h"
 
+#include <iDynTree/Core/EigenHelpers.h>
 #include <iDynTree/Core/Position.h>
 #include <iDynTree/Core/Rotation.h>
 #include <iDynTree/Core/Transform.h>
@@ -105,9 +107,17 @@ public:
     BasePosePublisherResources basePoseROS;
 
     // Methods for computing the robot pose
+    iDynTree::Transform world_H_humanBase_forRobotPose;
+    iDynTree::Transform humanBase_H_humanFrame_forRobotPose;
     iDynTree::Transform computeRobotPose_withSkin();
     iDynTree::Transform computeRobotPose_withFixedTransform();
     iDynTree::Transform computeRobotPose_withKnownContacts();
+
+    // RPC
+    bool setRobotPose();
+    std::string handlerPortName;
+    yarp::os::Port handlerPort;
+    bool readHumanTransform = true;
 };
 
 HumanRobotPose::HumanRobotPose()
@@ -542,6 +552,19 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
     pImpl->humanJointStateROS.message.velocity.resize(humanDofs, 0);
     pImpl->humanJointStateROS.message.effort.resize(humanDofs, 0);
 
+    // ===================
+    // INITIALIZE RPC PORT
+    // ===================
+
+    pImpl->handlerPortName =  "/" + getName() + "/rcp:i";
+    if (!pImpl->handlerPort.open(pImpl->handlerPortName.c_str())) {
+       yError() << LogPrefix <<  "Unable to open port " << pImpl->handlerPortName;
+       return false;
+    }
+
+    attach(pImpl->handlerPort);
+//    attachTerminal();
+
     // ==========================
     // INITIALIZE OTHER RESOURCES
     // ==========================
@@ -563,6 +586,10 @@ bool HumanRobotPose::configure(yarp::os::ResourceFinder& rf)
         pImpl->robotJointsVelocity.resize(robotDofs);
         pImpl->robotJointsVelocity.zero();
     }
+
+    // TODO
+    pImpl->world_H_humanBase_forRobotPose = iDynTree::Transform::Identity();
+    pImpl->humanBase_H_humanFrame_forRobotPose = iDynTree::Transform::Identity();
 
     return true;
 }
@@ -637,6 +664,11 @@ bool HumanRobotPose::updateModule()
             return false;
         }
 
+        Eigen::Map<Eigen::VectorXd> robotJointsMap(
+                    pImpl->robotJointsPosition.data(),
+                    pImpl->robotJointsPosition.size());
+        robotJointsMap = M_PI / 180.0 * robotJointsMap;
+
         pImpl->robotKinDynComp.setRobotState(
             pImpl->robotJointsPosition, pImpl->robotJointsVelocity, pImpl->gravity);
     }
@@ -644,6 +676,13 @@ bool HumanRobotPose::updateModule()
     // =============================
     // COMPUTE FRAME TRANSFORMATIONS
     // =============================
+
+    if (pImpl->readHumanTransform) {
+
+        pImpl->readHumanTransform = false;
+        pImpl->humanBase_H_humanFrame_forRobotPose =  pImpl->humanKinDynComp.getRelativeTransform("Pelvis", pImpl->fromHumanFrame);
+        pImpl->world_H_humanBase_forRobotPose =  pImpl->world_H_humanBase;
+    }
 
     iDynTree::Transform robotPose;
     if (pImpl->enableRobot) {
@@ -664,97 +703,109 @@ bool HumanRobotPose::updateModule()
         }
     }
 
-    // ===================
-    // WRITE TO ROS TOPICS
-    // ===================
+//    {
+//        yarp::os::LockGuard lock(pImpl->mutex);
 
-    yarp::os::LockGuard lock(pImpl->mutex);
+        // ===================
+        // WRITE TO ROS TOPICS
+        // ===================
 
-    // Initialize common metadata
-    //    const TickTime currentTime = normalizeSecNSec(yarp::os::Time::now());
+        // HUMAN JOINTS POSITION
+        // =====================
 
-    // HUMAN JOINTS POSITION
-    // =====================
+        // Get the message buffer to send
+        sensor_msgs_JointState& jointStateMsg = pImpl->humanJointStateROS.publisher.prepare();
 
-    // Get the message buffer to send
-    sensor_msgs_JointState& jointStateMsg = pImpl->humanJointStateROS.publisher.prepare();
+        pImpl->humanJointStateROS.message.header.seq = pImpl->humanJointStateROS.counter++;
+        pImpl->humanJointStateROS.message.header.stamp = normalizeSecNSec(yarp::os::Time::now());
+        for (size_t index = 0; index < jointStateMsg.position.size(); ++index) {
+            pImpl->humanJointStateROS.message.position[index] = pImpl->humanStateData->positions[index];
+        }
 
-    pImpl->humanJointStateROS.message.header.seq = pImpl->humanJointStateROS.counter++;
-    pImpl->humanJointStateROS.message.header.stamp = normalizeSecNSec(yarp::os::Time::now());
-    for (size_t index = 0; index < jointStateMsg.position.size(); ++index) {
-        pImpl->humanJointStateROS.message.position[index] = pImpl->humanStateData->positions[index];
-    }
+        jointStateMsg = pImpl->humanJointStateROS.message;
+        pImpl->humanJointStateROS.publisher.write();
 
-    jointStateMsg = pImpl->humanJointStateROS.message;
-    pImpl->humanJointStateROS.publisher.write();
-
-    // HUMAN TRANSFORM world_HH_base
-    // =============================
-
-    // Get the message to send
-    tf2_msgs_TFMessage& tfMsgHuman = pImpl->basePoseROS.publisher->prepare();
-
-    // Get the buffer and the original data
-    auto& humanTransform = pImpl->basePoseROS.message.transforms[HumanEntry];
-    const auto& humanStateData = pImpl->humanStateData;
-
-    // Metadata
-    humanTransform.header.seq = pImpl->basePoseROS.counter++;
-    humanTransform.header.stamp = normalizeSecNSec(yarp::os::Time::now());
-    humanTransform.header.frame_id = "ground";
-    humanTransform.child_frame_id = pImpl->tfPrefix + "/Pelvis";
-
-    // Translation
-    humanTransform.transform.translation.x = humanStateData->baseOriginWRTGlobal.x;
-    humanTransform.transform.translation.y = humanStateData->baseOriginWRTGlobal.y;
-    humanTransform.transform.translation.z = humanStateData->baseOriginWRTGlobal.z;
-
-    // Rotation
-    humanTransform.transform.rotation.x = humanStateData->baseOrientationWRTGlobal.imaginary.x;
-    humanTransform.transform.rotation.y = humanStateData->baseOrientationWRTGlobal.imaginary.y;
-    humanTransform.transform.rotation.z = humanStateData->baseOrientationWRTGlobal.imaginary.z;
-    humanTransform.transform.rotation.w = humanStateData->baseOrientationWRTGlobal.w;
-
-    // Store the transform
-    tfMsgHuman = pImpl->basePoseROS.message;
-
-    // ROBOT TRANSFORM world_HR_base
-    // =============================
-
-    if (pImpl->enableRobot) {
+        // HUMAN TRANSFORM world_HH_base
+        // =============================
 
         // Get the message to send
-        tf2_msgs_TFMessage& tfMsgRobot = pImpl->basePoseROS.publisher->prepare();
+        tf2_msgs_TFMessage& tfMsgHuman = pImpl->basePoseROS.publisher->prepare();
 
-        // Get the buffer
-        auto& robotTransform = pImpl->basePoseROS.message.transforms[RobotEntry];
-
-        iDynTree::Position world_P_robotBase = robotPose.getPosition();
-        iDynTree::Vector4 world_R_robotBase = robotPose.getRotation().asQuaternion();
+        // Get the buffer and the original data
+        auto& humanTransform = pImpl->basePoseROS.message.transforms[HumanEntry];
+        const auto& humanStateData = pImpl->humanStateData;
 
         // Metadata
-        robotTransform.header.seq = pImpl->basePoseROS.counter++;
-        robotTransform.header.stamp = normalizeSecNSec(yarp::os::Time::now());
-        robotTransform.header.frame_id = "ground";
-        robotTransform.child_frame_id = "root_link";
+        humanTransform.header.seq = pImpl->basePoseROS.counter++;
+        humanTransform.header.stamp = normalizeSecNSec(yarp::os::Time::now());
+        humanTransform.header.frame_id = "ground";
+        humanTransform.child_frame_id = pImpl->tfPrefix + "/Pelvis";
 
         // Translation
-        robotTransform.transform.translation.x = world_P_robotBase(0);
-        robotTransform.transform.translation.y = world_P_robotBase(1);
-        robotTransform.transform.translation.z = world_P_robotBase(2);
+        humanTransform.transform.translation.x = humanStateData->baseOriginWRTGlobal.x;
+        humanTransform.transform.translation.y = humanStateData->baseOriginWRTGlobal.y;
+        humanTransform.transform.translation.z = humanStateData->baseOriginWRTGlobal.z;
 
         // Rotation
-        robotTransform.transform.rotation.x = world_R_robotBase(1);
-        robotTransform.transform.rotation.y = world_R_robotBase(2);
-        robotTransform.transform.rotation.z = world_R_robotBase(3);
-        robotTransform.transform.rotation.w = world_R_robotBase(0);
+        humanTransform.transform.rotation.x = humanStateData->baseOrientationWRTGlobal.imaginary.x;
+        humanTransform.transform.rotation.y = humanStateData->baseOrientationWRTGlobal.imaginary.y;
+        humanTransform.transform.rotation.z = humanStateData->baseOrientationWRTGlobal.imaginary.z;
+        humanTransform.transform.rotation.w = humanStateData->baseOrientationWRTGlobal.w;
 
         // Store the transform
-        tfMsgRobot = pImpl->basePoseROS.message;
-    }
+        tfMsgHuman = pImpl->basePoseROS.message;
 
-    // Send the transform(s)
-    pImpl->basePoseROS.publisher->write();
+        // ROBOT TRANSFORM world_HR_base
+        // =============================
+
+        if (pImpl->enableRobot) {
+
+            // Get the message to send
+            tf2_msgs_TFMessage& tfMsgRobot = pImpl->basePoseROS.publisher->prepare();
+
+            // Get the buffer
+            auto& robotTransform = pImpl->basePoseROS.message.transforms[RobotEntry];
+
+            iDynTree::Position world_P_robotBase = robotPose.getPosition();
+            iDynTree::Vector4 world_R_robotBase = robotPose.getRotation().asQuaternion();
+
+            // Metadata
+            robotTransform.header.seq = pImpl->basePoseROS.counter++;
+            robotTransform.header.stamp = normalizeSecNSec(yarp::os::Time::now());
+            robotTransform.header.frame_id = "ground";
+            robotTransform.child_frame_id = "icub02/base_link";
+
+            // Translation
+            robotTransform.transform.translation.x = world_P_robotBase(0);
+            robotTransform.transform.translation.y = world_P_robotBase(1);
+            robotTransform.transform.translation.z = world_P_robotBase(2);
+
+            // Rotation
+            robotTransform.transform.rotation.x = world_R_robotBase(1);
+            robotTransform.transform.rotation.y = world_R_robotBase(2);
+            robotTransform.transform.rotation.z = world_R_robotBase(3);
+            robotTransform.transform.rotation.w = world_R_robotBase(0);
+
+            // Store the transform
+            tfMsgRobot = pImpl->basePoseROS.message;
+        }
+
+        // Send the transform(s)
+        pImpl->basePoseROS.publisher->write();
+//    }
+
+    return true;
+}
+
+bool HumanRobotPose::interruptModule()
+{
+    // Interrupt yarp ports
+    pImpl->humanStatePort.interrupt();
+    pImpl->handlerPort.interrupt();
+
+    // Interrupt ROS publishers
+    pImpl->basePoseROS.publisher->interrupt();
+    pImpl->humanJointStateROS.publisher.interrupt();
 
     return true;
 }
@@ -767,14 +818,21 @@ iDynTree::Transform HumanRobotPose::impl::computeRobotPose_withSkin()
 
 iDynTree::Transform HumanRobotPose::impl::computeRobotPose_withFixedTransform()
 {
-    iDynTree::Transform humanPelvis_H_humanFrame;
+//    iDynTree::Transform humanPelvis_H_humanFrame;
     iDynTree::Transform robotFrame_H_robotBase;
 
-    humanPelvis_H_humanFrame = humanKinDynComp.getRelativeTransform("Pelvis", fromHumanFrame);
-    robotFrame_H_robotBase = robotKinDynComp.getRelativeTransform(toRobotFrame, "root_link");
+//    humanPelvis_H_humanFrame = humanKinDynComp.getRelativeTransform("Pelvis", fromHumanFrame);
+    robotFrame_H_robotBase = robotKinDynComp.getRelativeTransform(toRobotFrame, "base_link");
 
-    return world_H_humanBase * humanPelvis_H_humanFrame * humanFrame_H_robotFrame
+  /*  return world_H_humanBase_forRobotPose * humanPelvis_H_humanFrame * humanFrame_H_robotFrame
+           * robotFrame_H_robotBase;*/
+    return world_H_humanBase_forRobotPose * humanBase_H_humanFrame_forRobotPose * humanFrame_H_robotFrame
            * robotFrame_H_robotBase;
+}
+
+bool HumanRobotPose::impl::setRobotPose() {
+    readHumanTransform = true;
+    return true;
 }
 
 iDynTree::Transform HumanRobotPose::impl::computeRobotPose_withKnownContacts()
@@ -787,17 +845,44 @@ bool HumanRobotPose::close()
 {
     // Close yarp ports
     pImpl->humanStatePort.close();
+    pImpl->handlerPort.close();
 
-    // Stop ROS publishers
-    pImpl->basePoseROS.publisher->interrupt();
+    // Close ROS publishers
     pImpl->basePoseROS.publisher->close();
-
-    pImpl->humanJointStateROS.publisher.interrupt();
     pImpl->humanJointStateROS.publisher.close();
 
-    // Interrupt the node
+    // Stop the node
     pImpl->node->interrupt();
 
+    return true;
+}
+
+bool HumanRobotPose::respond(const yarp::os::Bottle& command, yarp::os::Bottle& reply)
+{
+    reply.clear();
+    if (command.size() == 1 && command.get(0).isString()) {
+        std::string cmd = command.get(0).asString();
+
+        if (cmd == "help") {
+            reply.addString("commands: setRobotPose\n");
+            return true;
+        }
+        else if (cmd == "setRobotPose") {
+            if (!pImpl->setRobotPose()) {
+                reply.addString("Fail");
+                return true;
+            }
+            reply.addString("Ok");
+        }
+        else {
+            reply.addString("Fail");
+            return true;
+        }
+    }
+    else {
+        reply.addString("Fail");
+        return true;
+    }
     return true;
 }
 
