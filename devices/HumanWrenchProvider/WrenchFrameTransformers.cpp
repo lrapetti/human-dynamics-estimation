@@ -8,6 +8,7 @@
 
 #include <WrenchFrameTransformers.h>
 #include <iDynTree/Core/EigenHelpers.h>
+#include <iDynTree/Model/Link.h>
 
 using namespace hde::devices::impl;
 
@@ -20,9 +21,13 @@ bool FixedFrameWrenchTransformer::transformWrenchFrame(const iDynTree::Wrench in
     return true;
 }
 
-bool RobotFrameWrenchTransformer::transformWrenchFrame(const iDynTree::Wrench /*inputWrench*/,
-                                                       iDynTree::Wrench& /*transformedWrench*/)
+bool RobotFrameWrenchTransformer::transformWrenchFrame(const iDynTree::Wrench inputWrench,
+                                                       iDynTree::Wrench& transformedWrench)
 {
-    // TODO
-    return false;
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    auto transformedWrenchEigen = iDynTree::toEigen(transform.asAdjointTransformWrench())
+                                  * iDynTree::toEigen(inputWrench.asVector());
+    iDynTree::fromEigen(transformedWrench, transformedWrenchEigen);
+    return true;
 }
