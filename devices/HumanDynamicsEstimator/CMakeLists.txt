@@ -19,6 +19,7 @@ target_include_directories(HumanDynamicsEstimator PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 target_link_libraries(HumanDynamicsEstimator PUBLIC
+    IHumanState
     IHumanDynamics
     YARP::YARP_OS
     YARP::YARP_dev
