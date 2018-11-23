@@ -20,6 +20,7 @@ target_include_directories(HumanDynamicsEstimator PUBLIC
 
 target_link_libraries(HumanDynamicsEstimator PUBLIC
     IHumanState
+    IHumanWrench
     IHumanDynamics
     YARP::YARP_OS
     YARP::YARP_dev
