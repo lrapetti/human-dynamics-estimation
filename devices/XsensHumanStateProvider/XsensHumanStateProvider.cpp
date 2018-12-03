@@ -43,10 +43,28 @@ struct FloatingBaseName
     std::string wearable;
 };
 
+// Struct for trasform the joint angles from werables to model
+struct JointAngleTrasform
+{
+    double deltaAngle;
+    double gainAngle;
+
+    double werableToModel(double werableJointAngle)
+    {
+        return (deltaAngle + gainAngle * werableJointAngle) * 3.14159 / 180.0;
+    }
+
+    double modelToWearable(double modelJointAngle)
+    {
+        return (modelJointAngle * 180.0 / 3.14159 - deltaAngle)/gainAngle;
+    }
+};
+
 struct WearableJointInfo
 {
     WearableJointName name;
     size_t index;
+    JointAngleTrasform transform;
 };
 
 // Struct that contains all the data exposed by the HumanState interface
@@ -73,7 +91,7 @@ struct WearableStorage
     // Sensor associated with the base
     SensorPtr<const sensor::IVirtualLinkKinSensor> baseLinkSensor;
 
-    // Maps [model joint / link name] ==> [wearable virtual sensor name]
+    // Maps [model joint] ==> [wearable virtual sensor name]
     //
     // E.g. [Pelvis] ==> [XsensSuit::vLink::Pelvis]. Read from the configuration.
     //
@@ -108,6 +126,7 @@ public:
     ModelState state;
 
     bool getJointAnglesFromInputData(iDynTree::VectorDynSize& jointAngles);
+    bool getJointTransformFromConfiguration(iDynTree::VectorDynSize& deltaAngles, iDynTree::VectorDynSize& gainAngle);
 };
 
 // =========================
@@ -145,23 +164,24 @@ bool XsensHumanStateProvider::open(yarp::os::Searchable& config)
         return false;
     }
 
-    yarp::os::Bottle& jointsGroup = config.findGroup("MODEL_TO_DATA_JOINT_NAMES");
+    yarp::os::Bottle& jointsGroup = config.findGroup("MODEL_TO_DATA_JOINT");
     if (jointsGroup.isNull()) {
-        yError() << LogPrefix << "Failed to find group MODEL_TO_DATA_JOINT_NAMES";
+        yError() << LogPrefix << "Failed to find group MODEL_TO_DATA_JOINT";
         return false;
     }
 
     for (size_t i = 1; i < jointsGroup.size(); ++i) {
         if (!(jointsGroup.get(i).isList() && jointsGroup.get(i).asList()->size() == 2)) {
-            yError() << LogPrefix << "Childs of MODEL_TO_DATA_JOINT_NAMES must be lists";
+            yError() << LogPrefix << "Childs of MODEL_TO_DATA_JOINT must be lists";
             return false;
         }
         yarp::os::Bottle* list = jointsGroup.get(i).asList();
         std::string key = list->get(0).asString();
         yarp::os::Bottle* listContent = list->get(1).asList();
 
-        if (!((listContent->size() == 3) && (listContent->get(0).isString())
-              && (listContent->get(1).isString()) && (listContent->get(2).isInt()))) {
+        if (!((listContent->size() == 5) && (listContent->get(0).isString())
+              && (listContent->get(1).isString()) && (listContent->get(2).isInt())) 
+              && (listContent->get(2).isDouble()) && (listContent->get(2).isDouble())) {
             yError() << LogPrefix << "Joint list must have two strings and one integer";
             return false;
         }
@@ -187,10 +207,16 @@ bool XsensHumanStateProvider::open(yarp::os::Searchable& config)
         std::string wearableJointName = listContent->get(1).asString();
         size_t wearableJointComponent = listContent->get(2).asInt();
 
+        JointAngleTrasform transform;
+        transform.deltaAngle = listContent->get(3).asDouble();
+        transform.gainAngle = listContent->get(4).asDouble();
+
         yInfo() << LogPrefix << "Read joint map:" << modelJointName << "==> (" << wearableJointName
-                << "," << wearableJointComponent << ")";
+                << "," << wearableJointComponent << "," << transform.deltaAngle << "," << transform.gainAngle << ")";
+
         pImpl->wearableStorage.modelToWearable_JointInfo[modelJointName] = {wearableJointName,
-                                                                            wearableJointComponent};
+                                                                            wearableJointComponent,
+                                                                            transform};
     }
 
     yInfo() << LogPrefix << "*** ========================";
@@ -268,8 +294,9 @@ void XsensHumanStateProvider::run()
         iDynTree::Transform baseTransform(std::move(rotationiDynTree), std::move(positioniDynTree));
         
         // Compute the model joint angles and save it in the state
-        for (unsigned i = 0; i < pImpl->jointAngles.size(); ++i) {
-            pImpl->state.jointPositions[i] = pImpl->jointAngles.getVal(i) * 3.14159 / 180;
+        for (unsigned jointIndex = 0; jointIndex < pImpl->jointAngles.size(); ++jointIndex) {
+            std::string jointName = pImpl->humanModel.getJointName(jointIndex);
+            pImpl->state.jointPositions[jointIndex] = pImpl->wearableStorage.modelToWearable_JointInfo[jointName].transform.werableToModel(pImpl->jointAngles.getVal(jointIndex));
         }
 
         // Save poisition and orientation of the base link
@@ -281,7 +308,7 @@ void XsensHumanStateProvider::run()
             baseTransform.getRotation().asQuaternion().getVal(0),
             baseTransform.getRotation().asQuaternion().getVal(1),
             baseTransform.getRotation().asQuaternion().getVal(2),
-            baseTransform.getRotation().asQuaternion().getVal(3),};
+            baseTransform.getRotation().asQuaternion().getVal(3)};
 }
 
 bool XsensHumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::VectorDynSize& jointAngles)
@@ -323,6 +350,15 @@ bool XsensHumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::Vector
         // (specified in the configuration file)
         jointAngles.setVal(humanModel.getJointIndex(modelJointName),
                            anglesXYZ[wearableJointInfo.index]);
+    }
+
+    return true;
+}
+
+bool XsensHumanStateProvider::impl::getJointTransformFromConfiguration(iDynTree::VectorDynSize& deltaAngle, iDynTree::VectorDynSize& gainAngle)
+{
+    for (const auto& jointMapEntry : wearableStorage.modelToWearable_JointInfo) {
+        /// TODO
     }
 
     return true;
