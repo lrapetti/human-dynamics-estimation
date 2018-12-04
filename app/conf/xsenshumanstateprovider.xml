@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <robot name="new-hde-setup" build=0 portprefix="">
 
-<device type="transformServer" name="TransformServer">
+<!-- <device type="transformServer" name="TransformServer">
     <param name="transforms_lifetime">0.2</param>
     <group name="ROS">
         <param name="enable_ros_publisher">true</param>
         <param name="enable_ros_subscriber">false</param>
     </group>
-</device>
+</device> -->
 
 <device type="iwear_remapper" name="IWearRemapper">
     <param name="wearableDataPorts">(/XSensSuit/WearableData/data:o)</param>
@@ -90,6 +90,33 @@
        <param name="map_jLeftBallFoot_roty">(jLeftBallFoot_roty, XsensSuit::vSJoint::jLeftBallFoot, 1)</param>
        <param name="map_jLeftBallFoot_rotz">(jLeftBallFoot_rotz, XsensSuit::vSJoint::jLeftBallFoot, 2)</param>
     </group>
+    <group name="WERABLE_TO_MODEL_FRAME_RPY">
+       <!-- Example: (wearable sensor component, Roll, Pitch, YAW) -->
+       <param name="transform_jL5S1">(XsensSuit::vSJoint::jL5S1, 0, 0, 0)</param>
+       <param name="transform_jL4L3">(XsensSuit::vSJoint::jL4L3, 0, 0, 0)</param>
+       <param name="transform_jL1T12">(XsensSuit::vSJoint::jL1T12, 0, 0, 0)</param>
+       <param name="transform_jT9T8">(XsensSuit::vSJoint::jT9T8, 0, 0, 0)</param>
+       <param name="transform_jT1C7">(XsensSuit::vSJoint::jT1C7, 0, 0, 0)</param>
+       <param name="transform_jC1Head">(XsensSuit::vSJoint::jC1Head, 0, 0, 0)</param>
+       <!-- Be aware that here the names differ: C7 ==> T4 -->
+       <param name="transform_jRightC7Shoulder">(XsensSuit::vSJoint::jRightT4Shoulder, 0, 0, 0)</param>
+       <param name="transform_jRightShoulder">(XsensSuit::vSJoint::jRightShoulder, 0, 0, 0)</param>
+       <param name="transform_jRightElbow">(XsensSuit::vSJoint::jRightElbow, 0, 0, 0)</param>
+       <param name="transform_jRightWrist">(XsensSuit::vSJoint::jRightWrist, 0, 0, 0)</param>
+       <!-- Be aware that here the names differ: C7 ==> T4 -->
+       <param name="transform_jLeftC7Shoulder">(XsensSuit::vSJoint::jLeftT4Shoulder, 0, 0, 0)</param>
+       <param name="transform_jLeftShoulder">(XsensSuit::vSJoint::jLeftShoulder, 0, 0, 0)</param>
+       <param name="transform_jLeftElbow">(XsensSuit::vSJoint::jLeftElbow, 0, 0, 0)</param>
+       <param name="transform_jLeftWrist">(XsensSuit::vSJoint::jLeftWrist, 0, 0, 0)</param>
+       <param name="transform_jRightHip">(XsensSuit::vSJoint::jRightHip, 0, 0, 0)</param>
+       <param name="transform_jRightKnee">(XsensSuit::vSJoint::jRightKnee, 0, 0, 0)</param>
+       <param name="transform_jRightAnkle">(XsensSuit::vSJoint::jRightAnkle, 0, 0, 0)</param>
+       <param name="transform_jRightBallFoot">(XsensSuit::vSJoint::jRightBallFoot, 0, 0, 0)</param>
+       <param name="transform_jLeftHip">(XsensSuit::vSJoint::jLeftHip, 0, 0, 0)</param>
+       <param name="transform_jLeftKnee">(XsensSuit::vSJoint::jLeftKnee, 0, 0, 0)</param>
+       <param name="transform_jLeftAnkle">(XsensSuit::vSJoint::jLeftAnkle, 0, 0, 0)</param>
+       <param name="transform_jLeftBallFoot">(XsensSuit::vSJoint::jLeftBallFoot, 0, 0, 0)</param>
+    </group>
     <action phase="startup" level="5" type="attach">
         <paramlist name="networks">
             <elem name="HumanStateProviderLabel">IWearRemapper</elem>
@@ -98,7 +125,7 @@
     <action phase="shutdown" level="5" type="detach"/>
 </device>
 
-<device type="human_state_wrapper" name="HumanStateWrapper">
+<!-- <device type="human_state_wrapper" name="HumanStateWrapper">
     <param name="period">0.01</param>
     <param name="outputPort">/HDE/HumanStateWrapper/state:o</param>
     <action phase="startup" level="5" type="attach">
@@ -119,6 +146,6 @@
         </paramlist>
     </action>
     <action phase="shutdown" level="5" type="detach"/>
-</device>
+</device> -->
 
 </robot>

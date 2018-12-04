@@ -79,6 +79,9 @@ struct WearableStorage
     //
     std::unordered_map<ModelJointName, WearableJointInfo> modelToWearable_JointInfo;
 
+    // Maps [wearable virtual sensor name] ==> [werablto to model fram transform]
+    std::unordered_map<WearableJointName, iDynTree::Transform> werableToModel_Transform;
+
     // Maps [wearable virtual sensor name] ==> [virtual sensor]
     std::unordered_map<WearableJointName, SensorPtr<const sensor::IVirtualSphericalJointKinSensor>>
         jointSensorsMap;
@@ -157,7 +160,6 @@ bool XsensHumanStateProvider::open(yarp::os::Searchable& config)
             return false;
         }
         yarp::os::Bottle* list = jointsGroup.get(i).asList();
-        std::string key = list->get(0).asString();
         yarp::os::Bottle* listContent = list->get(1).asList();
 
         if (!((listContent->size() == 3) && (listContent->get(0).isString())
@@ -165,6 +167,30 @@ bool XsensHumanStateProvider::open(yarp::os::Searchable& config)
             yError() << LogPrefix << "Joint list must have two strings and one integer";
             return false;
         }
+    }
+
+    yarp::os::Bottle&  rotationGroup = config.findGroup("WERABLE_TO_MODEL_FRAME_RPY");
+    if (rotationGroup.isNull()) {
+        yError() << LogPrefix << "Failed to find group WERABLE_TO_MODEL_FRAME_RPY";
+        return false;
+    }
+
+    for (size_t i = 1; i < rotationGroup.size(); ++i) {
+        if (!(rotationGroup.get(i).isList() && rotationGroup.get(i).asList()->size() == 2)) {
+            yError() << LogPrefix << rotationGroup.get(i).asList()->size()
+             << "Childs of WERABLE_TO_MODEL_FRAME_RPY must be lists";
+            return false;
+        }
+        yarp::os::Bottle* rotationList = rotationGroup.get(i).asList();
+        yarp::os::Bottle* rotationListContent = rotationList->get(1).asList();
+
+// TODO
+//        if (!((rotationListContent->size() == 4) && (rotationListContent->get(0).isString())
+//              && (rotationListContent->get(1).isDouble()) && (rotationListContent->get(2).isDouble())
+//              && (rotationListContent->get(3).isDouble()))) {
+//            yError() << LogPrefix << "rotation list must have three double";
+//            return false;
+//        }
     }
 
     // ===============================
@@ -191,6 +217,27 @@ bool XsensHumanStateProvider::open(yarp::os::Searchable& config)
                 << "," << wearableJointComponent << ")";
         pImpl->wearableStorage.modelToWearable_JointInfo[modelJointName] = {wearableJointName,
                                                                             wearableJointComponent};
+    }
+
+    for (size_t i = 1; i < rotationGroup.size(); ++i) {
+        yarp::os::Bottle* rotationListContent = rotationGroup.get(i).asList()->get(1).asList();
+
+        std::string wearableJointName = rotationListContent->get(0).asString();
+        double roll = rotationListContent->get(1).asDouble();
+        double pitch = rotationListContent->get(2).asDouble();
+        double yaw = rotationListContent->get(3).asDouble();
+
+        pImpl->wearableStorage.werableToModel_Transform[wearableJointName].Identity();
+        iDynTree::Rotation frameRotation;
+        frameRotation.RPY(roll, pitch, yaw);
+        pImpl->wearableStorage.werableToModel_Transform[wearableJointName].setRotation(frameRotation);
+
+        yInfo() << LogPrefix << "Read frame transform:" << wearableJointName << "==> (" << roll
+                << "," << pitch << "," << yaw << ")";
+
+        iDynTree::Transform frameTransform;
+
+        pImpl->wearableStorage.werableToModel_Transform[wearableJointName] = frameTransform;
     }
 
     yInfo() << LogPrefix << "*** ========================";
@@ -313,16 +360,28 @@ bool XsensHumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::Vector
             return false;
         }
 
-        Vector3 anglesXYZ;
-        if (!sensor->getJointAnglesAsRPY(anglesXYZ)) {
+        // Joint Rotation in Xsens reference frame
+        Vector3 werableToJoint_anglesXYZ;
+        if (!sensor->getJointAnglesAsRPY(werableToJoint_anglesXYZ)) {
             yError() << LogPrefix << "Failed to read joint angles from virtual joint sensor";
             return false;
         }
 
+        iDynTree::Transform werableToJoint_Transform;
+        iDynTree::Rotation werableToJoint_Rotation;
+        werableToJoint_Rotation.RPY(werableToJoint_anglesXYZ[0], werableToJoint_anglesXYZ[1], werableToJoint_anglesXYZ[2]);
+        werableToJoint_Transform.setRotation(werableToJoint_Rotation);
+
+        // Joint Rotation in Model reference frame
+        iDynTree::Transform modelToJoint_Transform = werableToJoint_Transform * wearableStorage.werableToModel_Transform[wearableJointInfo.name].inverse();
+
+        iDynTree::Vector3 modelToJoint_anglesXYZ;
+        modelToJoint_anglesXYZ = modelToJoint_Transform.getRotation().asRPY();
+
         // Since anglesXYZ describes a spherical joint, take the right component
         // (specified in the configuration file)
         jointAngles.setVal(humanModel.getJointIndex(modelJointName),
-                           anglesXYZ[wearableJointInfo.index]);
+                           modelToJoint_anglesXYZ.getVal(wearableJointInfo.index));
     }
 
     return true;
