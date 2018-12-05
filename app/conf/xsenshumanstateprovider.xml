@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <robot name="new-hde-setup" build=0 portprefix="">
 
-<!-- <device type="transformServer" name="TransformServer">
+<device type="transformServer" name="TransformServer">
     <param name="transforms_lifetime">0.2</param>
     <group name="ROS">
         <param name="enable_ros_publisher">true</param>
         <param name="enable_ros_subscriber">false</param>
     </group>
-</device> -->
+</device>
 
 <device type="iwear_remapper" name="IWearRemapper">
     <param name="wearableDataPorts">(/XSensSuit/WearableData/data:o)</param>
@@ -125,7 +125,7 @@
     <action phase="shutdown" level="5" type="detach"/>
 </device>
 
-<!-- <device type="human_state_wrapper" name="HumanStateWrapper">
+<device type="human_state_wrapper" name="HumanStateWrapper">
     <param name="period">0.01</param>
     <param name="outputPort">/HDE/HumanStateWrapper/state:o</param>
     <action phase="startup" level="5" type="attach">
@@ -146,6 +146,6 @@
         </paramlist>
     </action>
     <action phase="shutdown" level="5" type="detach"/>
-</device> -->
+</device>
 
 </robot>
