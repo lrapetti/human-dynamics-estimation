@@ -241,7 +241,10 @@ bool XsensHumanStateProvider::open(yarp::os::Searchable& config)
         double yaw = deg2rad(rotationListContent->get(3).asDouble());
 
         pImpl->wearableStorage.werableToModel_Transform[wearableJointName] = iDynTree::Transform::Identity();
-        pImpl->wearableStorage.werableToModel_Transform[wearableJointName].setRotation(iDynTree::Rotation::RPY(roll, pitch, yaw));
+        // pImpl->wearableStorage.werableToModel_Transform[wearableJointName].setRotation(iDynTree::Rotation::RotZ(yaw) * iDynTree::Rotation::RotY(pitch) * iDynTree::Rotation::RotX(roll));
+        // pImpl->wearableStorage.werableToModel_Transform[wearableJointName].setRotation((iDynTree::Rotation::RotX(roll) * iDynTree::Rotation::RotY(pitch) ) * iDynTree::Rotation::RotZ(yaw));
+        // pImpl->wearableStorage.werableToModel_Transform[wearableJointName].setRotation(iDynTree::Rotation::RPY(roll, pitch, yaw));
+        pImpl->wearableStorage.werableToModel_Transform[wearableJointName].setRotation(iDynTree::Rotation(1.0,0.0,0.0,0.0,0.0,1.0,0.0,-1.0,0.0));
 
         yInfo() << LogPrefix << "Read frame transform:" << wearableJointName << "==> (" << roll
                 << "," << pitch << "," << yaw << ")";
@@ -323,7 +326,7 @@ void XsensHumanStateProvider::run()
         
         // Compute the model joint angles and save it in the state
         for (unsigned i = 0; i < pImpl->jointAngles.size(); ++i) {
-            pImpl->state.jointPositions[i] = pImpl->jointAngles.getVal(i) * 3.14159 / 180;
+            pImpl->state.jointPositions[i] = pImpl->jointAngles.getVal(i);
         }
 
         // Save poisition and orientation of the base link
@@ -340,6 +343,7 @@ void XsensHumanStateProvider::run()
 
 bool XsensHumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::VectorDynSize& jointAngles)
 {
+    yInfo() << "-----------------------------";
     for (const auto& jointMapEntry : wearableStorage.modelToWearable_JointInfo) {
         const ModelJointName& modelJointName = jointMapEntry.first;
         const WearableJointInfo& wearableJointInfo = jointMapEntry.second;
@@ -369,7 +373,7 @@ bool XsensHumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::Vector
 
         // Joint Rotation in Xsens reference frame
         Vector3 werableToJoint_anglesXYZ;
-        iDynTree::Vector3 modelToJoint_anglesXYZ;
+        Vector3 modelToJoint_anglesXYZ;
         if (!sensor->getJointAnglesAsRPY(werableToJoint_anglesXYZ)) {
             yError() << LogPrefix << "Failed to read joint angles from virtual joint sensor";
             return false;
@@ -382,43 +386,52 @@ bool XsensHumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::Vector
             iDynTree::Transform werableToJoint_Transform = iDynTree::Transform::Identity();
             iDynTree::Transform werableToModel_Transform = wearableStorage.werableToModel_Transform[wearableJointInfo.name];
 
-            double roll = deg2rad(werableToJoint_anglesXYZ[0]);
-            double pitch = deg2rad(werableToJoint_anglesXYZ[1]);
-            double yaw = deg2rad(werableToJoint_anglesXYZ[2]);
+            double xangle = deg2rad(werableToJoint_anglesXYZ[0]);
+            double yangle = deg2rad(werableToJoint_anglesXYZ[1]);
+            double zangle = deg2rad(werableToJoint_anglesXYZ[2]);
 
             // USING RPY
-            // werableToJoint_Transform.setRotation(iDynTree::Rotation::RPY(roll, pitch, yaw));
+            // werableToJoint_Transform.setRotation(iDynTree::Rotation::RPY(xangle, yangle, zangle));
             // USING SINGLE ROTATIONS
-            werableToJoint_Transform.setRotation(iDynTree::Rotation::RotZ(yaw) * iDynTree::Rotation::RotY(pitch) * iDynTree::Rotation::RotX(roll));
+            // werableToJoint_Transform.setRotation(iDynTree::Rotation::RotZ(zangle) * iDynTree::Rotation::RotY(yangle) * iDynTree::Rotation::RotX(xangle) );
+            werableToJoint_Transform.setRotation(iDynTree::Rotation::RotX(xangle) * iDynTree::Rotation::RotY(yangle) * iDynTree::Rotation::RotZ(zangle) );
 
             // Joint Rotation in Model reference frame
-            iDynTree::Transform modelToJoint_Transform = werableToJoint_Transform * werableToModel_Transform.inverse();
-            modelToJoint_anglesXYZ = modelToJoint_Transform.getRotation().asRPY();
+            iDynTree::Transform modelToJoint_Transform = werableToModel_Transform.inverse() * werableToJoint_Transform * werableToModel_Transform;
+            modelToJoint_Transform.getRotation().getRPY(modelToJoint_anglesXYZ[0], modelToJoint_anglesXYZ[1], modelToJoint_anglesXYZ[2]);
 
-            if(wearableJointInfo.name == "XsensSuit::vSJoint::jRightElbow")
+            if(wearableJointInfo.name == "XsensSuit::vSJoint::jRightKnee" || wearableJointInfo.name == "XsensSuit::vSJoint::jRightAnkle" || wearableJointInfo.name == "XsensSuit::vSJoint::jRightHip")
             {
-                yInfo() << "-----------------------------";
-                yInfo() << wearableJointInfo.name;
-                yInfo() << "WERABLE_TO_MODEL";
-                yInfo() << werableToModel_Transform.toString();
-                yInfo() << "MODEL_TO_WERABLE";
-                yInfo() << werableToModel_Transform.inverse().toString();
-                yInfo() << "WERABLE_TO_JOINT";
-                yInfo() << werableToJoint_Transform.toString();
-                yInfo() << "MODEL_TO_JOINT";
-                yInfo() << modelToJoint_Transform.toString();
-                yInfo() << "werable to joint:" << "==> (" << werableToJoint_anglesXYZ[0]
-                        << "," << werableToJoint_anglesXYZ[1] << "," << werableToJoint_anglesXYZ[2] << ")";
-                yInfo() << "model to joint:" << "==> (" << rad2deg(modelToJoint_anglesXYZ.getVal(0))
-                        << "," << rad2deg(modelToJoint_anglesXYZ.getVal(1)) << "," << rad2deg(modelToJoint_anglesXYZ.getVal(2)) << ")";
-                yInfo() << "-----------------------------";
+//                yInfo() << "-----------------------------";
+//                yInfo() << wearableJointInfo.name;
+//                yInfo() << "WERABLE_TO_MODEL";
+//                yInfo() << werableToModel_Transform.toString();
+//                yInfo() << "MODEL_TO_WERABLE";
+//                yInfo() << werableToModel_Transform.inverse().toString();
+//                yInfo() << "WERABLE_TO_JOINT";
+//                yInfo() << werableToJoint_Transform.toString();
+////                yInfo() << "MODEL_TO_JOINT";
+////                yInfo() << modelToJoint_Transform.toString();
+//                yInfo() << "werable to joint:" << "==> (" << werableToJoint_anglesXYZ[0]
+//                        << "," << werableToJoint_anglesXYZ[1] << "," << werableToJoint_anglesXYZ[2] << ")";
+//                yInfo() << "model to joint:" << "==> (" << rad2deg(modelToJoint_anglesXYZ.getVal(0))
+//                        << "," << rad2deg(modelToJoint_anglesXYZ.getVal(1)) << "," << rad2deg(modelToJoint_anglesXYZ.getVal(2)) << ")";
+                yInfo() << "DIFF:" << "==> (" << rad2deg(modelToJoint_anglesXYZ[0]) - werableToJoint_anglesXYZ[0]
+                        << "," << rad2deg(modelToJoint_anglesXYZ[1]) +  werableToJoint_anglesXYZ[2] << "," << rad2deg(modelToJoint_anglesXYZ[2]) - werableToJoint_anglesXYZ[1] << ")";
+//                werableToJoint_Transform = iDynTree::Transform::Identity();
+                // werableToJoint_Transform.setRotation(iDynTree::Rotation::RotZ(modelToJoint_anglesXYZ.getVal(2)) * iDynTree::Rotation::RotY(modelToJoint_anglesXYZ.getVal(1)) * iDynTree::Rotation::RotX(modelToJoint_anglesXYZ.getVal(0)));
+                // werableToJoint_Transform.setRotation(iDynTree::Rotation::RotX(modelToJoint_anglesXYZ.getVal(0)) * iDynTree::Rotation::RotY(modelToJoint_anglesXYZ.getVal(1)) * iDynTree::Rotation::RotZ(modelToJoint_anglesXYZ.getVal(2)));
+//                werableToJoint_Transform.setRotation(iDynTree::Rotation::RPY(modelToJoint_anglesXYZ.getVal(0), modelToJoint_anglesXYZ.getVal(1), modelToJoint_anglesXYZ.getVal(2)));
+//                yInfo() << "MODEL_TO_JOINT_2";
+//                yInfo() << modelToJoint_Transform.toString();
+//                yInfo() << "-----------------------------";
             }
         }
 
         // Since anglesXYZ describes a spherical joint, take the right component
         // (specified in the configuration file)
         jointAngles.setVal(humanModel.getJointIndex(modelJointName),
-                           modelToJoint_anglesXYZ.getVal(wearableJointInfo.index));
+                           modelToJoint_anglesXYZ[wearableJointInfo.index]);
     }
 
     return true;
