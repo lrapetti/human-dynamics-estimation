@@ -9,7 +9,8 @@ set(URDF_HUMAN_FILES urdfs/Marta48DoF.urdf
                      urdfs/Meri66DoF.urdf
                      urdfs/Claudia66DoF.urdf
                      urdfs/Claudia48DoF_Dec2017.urdf
-                     urdfs/Claudia66DoF_Dec2017.urdf)
+                     urdfs/Claudia66DoF_Dec2017.urdf
+                     urdfs/Claudia66DoF_2PILimit.urdf)
 
 set(JOINT_INI_HUMAN_FILES urdfs/config/48DoFModel.ini
                           urdfs/config/66DoFModel.ini)
