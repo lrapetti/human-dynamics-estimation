@@ -24,6 +24,10 @@
 #include <chrono>
 #include <thread>
 
+#ifndef PI
+#define PI 3.14159265358979323846
+#endif
+
 const std::string DeviceName = "HumanStateProvider";
 const std::string LogPrefix = DeviceName + " :";
 constexpr double DefaultPeriod = 0.01;
@@ -34,6 +38,17 @@ using namespace wearable;
 // ==============
 // IMPL AND UTILS
 // ==============
+
+// INLINE OPERATIONS
+inline double deg2rad(const double deg)
+{
+    return deg * PI / 180;
+}
+
+inline double rad2deg(const double rad)
+{
+    return rad * 180 / PI;
+}
 
 using ModelJointName = std::string;
 using ModelLinkName = std::string;
@@ -454,12 +469,28 @@ void HumanStateProvider::run()
             return;
         }
 
+        if (linkName == "RightLowerLeg")
+        {
+            iDynTree::Vector3 RotationRPY = pImpl->linkRotationMatrices.at(linkName).asRPY();
+            yInfo() << linkName;
+            yInfo() << "LINK ORIENTATION: " << "==> (" << rad2deg(RotationRPY.getVal(0))
+                    << "," << rad2deg(RotationRPY.getVal(1)) << "," << rad2deg(RotationRPY.getVal(2)) << ")";
+            yInfo() << pImpl->linkRotationMatrices.at(linkName).toString();
+        }
+
         if (!pImpl->ik.updateRotationTarget(linkName, pImpl->linkRotationMatrices.at(linkName))) {
             yError() << LogPrefix << "Failed to update rotation target for link" << linkName;
             askToStop();
             return;
         }
     }
+
+//    iDynTree::Rotation RotationRPY_matrix = pImpl->linkRotationMatrices.at("RightUpperLeg").inverse() * pImpl->linkRotationMatrices.at("RightLowerLeg");
+//    iDynTree::Vector3 RotationRPY = RotationRPY_matrix.asRPY();
+//    yInfo() << "final";
+//    yInfo() << RotationRPY_matrix.toString();
+//    yInfo() << "ORIENTATION: " << "==> (" << rad2deg(RotationRPY.getVal(0))
+//            << "," << rad2deg(RotationRPY.getVal(1)) << "," << rad2deg(RotationRPY.getVal(2)) << ")";
 
     // ====================
     // SOLVE THE IK PROBLEM
@@ -468,17 +499,17 @@ void HumanStateProvider::run()
     // TODO: add benchmarking capabilities. Using PeriodicThread utilities?
     auto tick = std::chrono::high_resolution_clock::now();
 
-    if (!pImpl->ik.solve()) {
-        if (pImpl->allowIKFailures) {
-            yWarning() << LogPrefix << "IK failed, keeping the previous solution";
-            return;
-        }
-        else {
-            yError() << LogPrefix << "Failed to solve IK";
-            askToStop();
-            return;
-        }
-    }
+//    if (!pImpl->ik.solve()) {
+//        if (pImpl->allowIKFailures) {
+//            yWarning() << LogPrefix << "IK failed, keeping the previous solution";
+//            return;
+//        }
+//        else {
+//            yError() << LogPrefix << "Failed to solve IK";
+//            askToStop();
+//            return;
+//        }
+//    }
 
     auto tock = std::chrono::high_resolution_clock::now();
     yDebug() << LogPrefix << "IK took"
@@ -596,6 +627,30 @@ bool HumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::VectorDynSi
         if (!sensor->getJointAnglesAsRPY(anglesXYZ)) {
             yError() << LogPrefix << "Failed to read joint angles from virtual joint sensor";
             return false;
+        }
+
+        if(wearableJointInfo.name == "XsensSuit::vSJoint::jRightKnee")
+        {
+            double xangle = deg2rad(anglesXYZ[2]);
+            double yangle = deg2rad(anglesXYZ[1]);
+            double zangle = deg2rad(anglesXYZ[0]);
+
+            iDynTree::Transform werableToJoint_Transform = iDynTree::Transform::Identity();
+            werableToJoint_Transform.setRotation(iDynTree::Rotation::RotX(zangle) * iDynTree::Rotation::RotY(xangle) * iDynTree::Rotation::RotZ(yangle) );
+
+            iDynTree::Transform werableToModel = iDynTree::Transform::Identity();
+            werableToModel.setRotation(iDynTree::Rotation(1.0,0.0,0.0,0.0,0.0,1.0,0.0,-1.0,0.0));
+
+            iDynTree::Transform modelToJoint = werableToModel * werableToJoint_Transform * werableToModel.inverse();
+            iDynTree::Vector3 new_angles = modelToJoint.getRotation().asRPY();
+
+            yInfo() << wearableJointInfo.name;
+            yInfo() << "JOINT ANGLES:" << "==> (" << rad2deg(xangle)
+                    << "," << rad2deg(yangle) << "," << rad2deg(zangle) << ")";
+            yInfo() << "New Angles:" << "==> (" << rad2deg(new_angles.getVal(0))
+                    << "," << rad2deg(new_angles.getVal(1)) << "," << rad2deg(new_angles.getVal(2)) << ")";
+            yInfo() << werableToJoint_Transform.toString();
+            yInfo() << modelToJoint.toString();
         }
 
         // Since anglesXYZ describes a spherical joint, take the right component
