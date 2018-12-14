@@ -1085,6 +1085,7 @@ void HumanDynamicsEstimator::run()
     // Iterate over the sensors and add corresponding measurements
     int wrenchSensor = 0;
     bool wrenchMeasurementsSet = false;
+
     for (const iDynTree::BerdySensor& sensor : berdySensors) {
         // Create the key
         SensorKey key = {sensor.type, sensor.id};
@@ -1092,6 +1093,7 @@ void HumanDynamicsEstimator::run()
         // Check that it exists in the sensorMapIndex
         if (pImpl->berdyData.sensorMapIndex.find(key) != pImpl->berdyData.sensorMapIndex.end()) {
             SensorMapIndex::const_iterator found = pImpl->berdyData.sensorMapIndex.find(key);
+
             // Update sensor measurements vector y
             switch (sensor.type)
             {
@@ -1125,9 +1127,9 @@ void HumanDynamicsEstimator::run()
                                 {
                                     pImpl->berdyData.buffers.measurements(found->second.offset + i) = wrenchValues.at(wrenchSensor*6 + i);
                                 }
-                                if (wrenchSensor < 4) {
+                                if (wrenchSensor < 2) {
                                     wrenchSensor++;
-                                    if (wrenchSensor == 4) {
+                                    if (wrenchSensor == 2) {
                                         wrenchMeasurementsSet = true;
                                     }
                                 }
@@ -1178,6 +1180,10 @@ void HumanDynamicsEstimator::run()
         pImpl->berdyData.helper.extractJointTorquesFromDynamicVariables(estimatedDynamicVariables,
                                                                         pImpl->berdyData.state.jointsPosition,
                                                                         pImpl->berdyData.estimates.jointTorqueEstimates);
+//        yDebug() << "--- estimated dynamic variables" << estimatedDynamicVariables.toString();
+//        yDebug() << "--- joint Position" << estimatedDynamicVariables.toString();
+//        yDebug() << "--- jointTorqueEstimates" << pImpl->berdyData.estimates.jointTorqueEstimates.toString();
+//        yDebug() << "--------";
     }
 
 }

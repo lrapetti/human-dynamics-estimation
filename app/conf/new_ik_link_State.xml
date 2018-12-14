@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<robot name="new-hde-setup" build=0 portprefix="">
+
+    <device type="transformServer" name="TransformServer">
+        <param name="transforms_lifetime">0.2</param>
+        <group name="ROS">
+            <param name="enable_ros_publisher">true</param>
+            <param name="enable_ros_subscriber">false</param>
+        </group>
+    </device>
+
+    <device type="iwear_remapper" name="XSenseIWearRemapper">
+        <param name="wearableDataPorts">(/XSensSuit/WearableData/data:o)</param>
+        <param name="wearableRPCPorts">(/XSensSuit/WearableData/metadataRpc:o)</param>
+        <param name="outputPortName">/HDE/XsensIWearRemapper/data:o</param>
+    </device>
+
+    <device type="human_state_provider" name="HumanStateProvider">
+        <param name="period">0.02</param>
+        <!-- <param name="urdf">Claudia66DoF_noLimit.urdf</param> -->
+        <param name="urdf">Claudia66DoF_2PILimit.urdf</param>
+        <!-- <param name="urdf">Claudia66DoF_e16Limit.urdf</param> -->
+        <param name="floatingBaseFrame">(Pelvis, XsensSuit::vLink::Pelvis)</param>
+        <param name="allowIKFailures">true</param>
+        <param name="maxIterationsIK">300</param>
+        <param name="costTolerance">0.7</param>
+        <param name="useXsensJointsAngles">true</param>
+        <!-- TODO: How to use a reduced model in the entire HDE? (Starting from HumanStateProvider) -->
+        <group name="MODEL_TO_DATA_LINK_NAMES">
+            <param name="map_Pelvis">(Pelvis, XsensSuit::vLink::Pelvis)</param>
+            <param name="map_L5">(L5, XsensSuit::vLink::L5)</param>
+            <param name="map_L3">(L3, XsensSuit::vLink::L3)</param>
+            <param name="map_T12">(T12, XsensSuit::vLink::T12)</param>
+            <param name="map_T8">(T8, XsensSuit::vLink::T8)</param>
+            <param name="map_Neck">(Neck, XsensSuit::vLink::Neck)</param>
+            <param name="map_Head">(Head, XsensSuit::vLink::Head)</param>
+            <param name="map_RightShoulder">(RightShoulder, XsensSuit::vLink::RightShoulder)</param>
+            <param name="map_RightUpperArm">(RightUpperArm, XsensSuit::vLink::RightUpperArm)</param>
+            <param name="map_RightForeArm">(RightForeArm, XsensSuit::vLink::RightForeArm)</param>
+            <param name="map_RightHand">(RightHand, XsensSuit::vLink::RightHand)</param>
+            <param name="map_LeftShoulder">(LeftShoulder, XsensSuit::vLink::LeftShoulder)</param>
+            <param name="map_LeftUpperArm">(LeftUpperArm, XsensSuit::vLink::LeftUpperArm)</param>
+            <param name="map_LeftForeArm">(LeftForeArm, XsensSuit::vLink::LeftForeArm)</param>
+            <param name="map_LeftHand">(LeftHand, XsensSuit::vLink::LeftHand)</param>
+            <param name="map_RightUpperLeg">(RightUpperLeg, XsensSuit::vLink::RightUpperLeg)</param>
+            <param name="map_RightLowerLeg">(RightLowerLeg, XsensSuit::vLink::RightLowerLeg)</param>
+            <param name="map_RightFoot">(RightFoot, XsensSuit::vLink::RightFoot)</param>
+            <param name="map_RightToe">(RightToe, XsensSuit::vLink::RightToe)</param>
+            <param name="map_LeftUpperLeg">(LeftUpperLeg, XsensSuit::vLink::LeftUpperLeg)</param>
+            <param name="map_LeftLowerLeg">(LeftLowerLeg, XsensSuit::vLink::LeftLowerLeg)</param>
+            <param name="map_LeftFoot">(LeftFoot, XsensSuit::vLink::LeftFoot)</param>
+            <param name="map_LeftToe">(LeftToe, XsensSuit::vLink::LeftToe)</param>
+        </group>
+        <group name="SPHERICAL_LINK_DESCRIPTION">
+           <!-- Example: (werable spherical joint, jointx, jointy, jointz, parent, child) -->
+           <param name="sperical_jL5S1">(XsensSuit::vSJoint::jL5S1, jL5S1_rotx, jL5S1_roty, jL5S1_rotz, Pelvis, L5)</param>
+           <param name="sperical_jL4L3">(XsensSuit::vSJoint::jL4L3, jL5S1_rotx, jL4L3_roty, jL4L3_rotz, L5, L3)</param>
+           <param name="sperical_jL1T12">(XsensSuit::vSJoint::jL1T12, jL1T12_rotx, jL1T12_roty, jL1T12_rotz, L3, T12)</param>
+           <param name="sperical_jT9T8">(XsensSuit::vSJoint::jT9T8, jT9T8_rotx, jT9T8_roty, jT9T8_rotz, T12, T8)</param>
+           <param name="sperical_jT1C7">(XsensSuit::vSJoint::jT1C7, jT1C7_rotx, jT1C7_roty, jT1C7_rotz, T8, Neck)</param>
+           <param name="sperical_jC1Head">(XsensSuit::vSJoint::jC1Head, jC1Head_rotx, jC1Head_roty, jC1Head_rotz, Neck, Head)</param>
+           <param name="sperical_jRightC7Shoulder">(XsensSuit::vSJoint::jRightT4Shoulder, jRightC7Shoulder_rotx, jRightC7Shoulder_roty, jRightC7Shoulder_rotz, T8, RightShoulder)</param>
+           <param name="sperical_jRightShoulder">(XsensSuit::vSJoint::jRightShoulder, jRightShoulder_rotx, jRightShoulder_roty, jRightShoulder_rotz, RightShoulder, RightUpperArm)</param>
+           <param name="sperical_jRightElbow">(XsensSuit::vSJoint::jRightElbow, jRightElbow_rotx, jRightElbow_roty, jRightElbow_rotz, RightUpperArm, RightForeArm)</param>
+           <param name="sperical_jRightWrist">(XsensSuit::vSJoint::jRightWrist, jRightWrist_rotx, jRightWrist_roty, jRightWrist_rotz, RightForeArm, RightHand)</param>
+           <param name="sperical_jLeftC7Shoulder">(XsensSuit::vSJoint::jLeftT4Shoulder, jLeftC7Shoulder_rotx, jLeftC7Shoulder_roty, jLeftC7Shoulder_rotz, T8, LeftShoulder)</param>
+           <param name="sperical_jLeftShoulder">(XsensSuit::vSJoint::jLeftShoulder, jLeftShoulder_rotx, jLeftShoulder_roty, jLeftShoulder_rotz, LeftShoulder, LeftUpperArm)</param>
+           <param name="sperical_jLeftElbow">(XsensSuit::vSJoint::jLeftElbow, jLeftElbow_rotx, jLeftElbow_roty, jLeftElbow_rotz, LeftUpperArm, LeftForeArm)</param>
+           <param name="sperical_jLeftWrist">(XsensSuit::vSJoint::jLeftWrist, jLeftWrist_rotx, jLeftWrist_roty, jLeftWrist_rotz, LeftForeArm, LeftHand)</param>
+           <param name="sperical_jRightHip">(XsensSuit::vSJoint::jRightHip, jRightHip_rotx, jRightHip_roty, jRightHip_rotz, Pelvis, RightUpperLeg)</param>
+           <param name="sperical_jRightKnee">(XsensSuit::vSJoint::jRightKnee, jRightKnee_rotx, jRightKnee_roty, jRightKnee_rotz, RightUpperLeg, RightLowerLeg)</param>
+           <param name="sperical_jRightAnkle">(XsensSuit::vSJoint::jRightAnkle, jRightAnkle_rotx, jRightAnkle_roty, jRightAnkle_rotz, RightLowerLeg, RightFoot)</param>
+           <param name="sperical_jRightBallFoot">(XsensSuit::vSJoint::jRightBallFoot, jRightBallFoot_rotx, jRightBallFoot_roty, jRightBallFoot_rotz, RightFoot, RightToe)</param>
+           <param name="sperical_jLeftHip">(XsensSuit::vSJoint::jLeftHip, jLeftHip_rotx, jLeftHip_roty, jLeftHip_rotz, Pelvis, LeftUpperLeg)</param>
+           <param name="sperical_jLeftKnee">(XsensSuit::vSJoint::jLeftKnee, jLeftKnee_rotx, jLeftKnee_roty, jLeftKnee_rotz, LeftUpperLeg, LeftLowerLeg)</param>
+           <param name="sperical_jLeftAnkle">(XsensSuit::vSJoint::jLeftAnkle, jLeftAnkle_rotx, jLeftAnkle_roty, jLeftAnkle_rotz, LeftLowerLeg, LeftFoot)</param>
+           <param name="sperical_jLeftBallFoot">(XsensSuit::vSJoint::jLeftBallFoot, jLeftBallFoot_rotx, jLeftBallFoot_roty, jLeftBallFoot_rotz, LeftFoot, LeftToe)</param>
+        </group>
+        <action phase="startup" level="5" type="attach">
+            <paramlist name="networks">
+                <elem name="HumanStateProviderLabel">XSenseIWearRemapper</elem>
+            </paramlist>
+        </action>
+        <action phase="shutdown" level="5" type="detach"/>
+    </device>
+
+</robot>

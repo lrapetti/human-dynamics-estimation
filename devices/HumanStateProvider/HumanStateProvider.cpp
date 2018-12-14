@@ -47,11 +47,21 @@ struct FloatingBaseName
     std::string wearable;
 };
 
-struct WearableJointInfo
+struct ModelSphericalLink
 {
-    WearableJointName name;
-    size_t index;
+    ModelJointName jointName_x;
+    ModelJointName jointName_y;
+    ModelJointName jointName_z;
+
+    ModelLinkName parent;
+    ModelLinkName child;
 };
+
+//struct WearableJointInfo
+//{
+//    WearableJointName name;
+//    size_t index;
+//};
 
 // Struct that contains all the data exposed by the HumanState interface
 struct SolutionIK
@@ -82,7 +92,8 @@ struct WearableStorage
     // E.g. [Pelvis] ==> [XsensSuit::vLink::Pelvis]. Read from the configuration.
     //
     std::unordered_map<ModelLinkName, WearableLinkName> modelToWearable_LinkName;
-    std::unordered_map<ModelJointName, WearableJointInfo> modelToWearable_JointInfo;
+    std::unordered_map<WearableJointName, ModelSphericalLink> wearableToModel_SphericalJoint;
+    // std::unordered_map<ModelJointName, WearableJointInfo> modelToWearable_JointInfo;
 
     // Maps [wearable virtual sensor name] ==> [virtual sensor]
     std::unordered_map<WearableLinkName, SensorPtr<const sensor::IVirtualLinkKinSensor>>
@@ -201,26 +212,28 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
         }
     }
 
-    yarp::os::Bottle& jointsGroup = config.findGroup("MODEL_TO_DATA_JOINT_NAMES");
+    yarp::os::Bottle& jointsGroup = config.findGroup("SPHERICAL_LINK_DESCRIPTION");
     if (jointsGroup.isNull()) {
-        yError() << LogPrefix << "Failed to find group MODEL_TO_DATA_JOINT_NAMES";
+        yError() << LogPrefix << "Failed to find group SPHERICAL_LINK_DESCRIPTION";
         return false;
     }
 
     for (size_t i = 1; i < jointsGroup.size(); ++i) {
-        if (!(jointsGroup.get(i).isList() && jointsGroup.get(i).asList()->size() == 2)) {
-            yError() << LogPrefix << "Childs of MODEL_TO_DATA_JOINT_NAMES must be lists";
-            return false;
-        }
+        // TODO
+//        if (!(jointsGroup.get(i).isList() && jointsGroup.get(i).asList()->size() == 2)) {
+//            yError() << LogPrefix << "Childs of SPHERICAL_LINK_DESCRIPTION must be lists";
+//            return false;
+//        }
         yarp::os::Bottle* list = jointsGroup.get(i).asList();
         std::string key = list->get(0).asString();
         yarp::os::Bottle* listContent = list->get(1).asList();
 
-        if (!((listContent->size() == 3) && (listContent->get(0).isString())
-              && (listContent->get(1).isString()) && (listContent->get(2).isInt()))) {
-            yError() << LogPrefix << "Joint list must have two strings and one integer";
-            return false;
-        }
+        // TODO
+//        if (!((listContent->size() == 3) && (listContent->get(0).isString())
+//              && (listContent->get(1).isString()) && (listContent->get(2).isInt()))) {
+//            yError() << LogPrefix << "Joint list must have two strings and one integer";
+//            return false;
+//        }
     }
 
     // ===============================
@@ -253,14 +266,22 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     for (size_t i = 1; i < jointsGroup.size(); ++i) {
         yarp::os::Bottle* listContent = jointsGroup.get(i).asList()->get(1).asList();
 
-        std::string modelJointName = listContent->get(0).asString();
-        std::string wearableJointName = listContent->get(1).asString();
-        size_t wearableJointComponent = listContent->get(2).asInt();
+        WearableJointName wearableJointName = listContent->get(0).asString();
+        ModelJointName jointName_x = listContent->get(1).asString();
+        ModelJointName jointName_y = listContent->get(2).asString();
+        ModelJointName jointName_z = listContent->get(3).asString();
+        ModelLinkName parent = listContent->get(4).asString();
+        ModelLinkName child = listContent->get(5).asString();
 
-        yInfo() << LogPrefix << "Read joint map:" << modelJointName << "==> (" << wearableJointName
-                << "," << wearableJointComponent << ")";
-        pImpl->wearableStorage.modelToWearable_JointInfo[modelJointName] = {wearableJointName,
-                                                                            wearableJointComponent};
+
+        yInfo() << LogPrefix << "Read joint map:" << wearableJointName << "==> (" << jointName_x
+                << "," << jointName_y << "," << jointName_z << ") (" << parent
+                << "," << child << ")";
+        pImpl->wearableStorage.wearableToModel_SphericalJoint[wearableJointName] = {jointName_x,
+                                                                                    jointName_y,
+                                                                                    jointName_z,
+                                                                                    parent,
+                                                                                    child};
     }
 
     yInfo() << LogPrefix << "*** ========================";
@@ -398,6 +419,13 @@ void HumanStateProvider::run()
 
     iDynTree::Transform baseTransform(std::move(rotationiDynTree), std::move(positioniDynTree));
 
+    // Get the orientation of the links from the input data
+    if (!pImpl->getLinkOrientationFromInputData(pImpl->linkRotationMatrices)) {
+        yError() << LogPrefix << "Failed to get link orientations from input data";
+        askToStop();
+        return;
+    }
+
     // Initialize the IK problem with joint angles
     // ===========================================
 
@@ -432,13 +460,6 @@ void HumanStateProvider::run()
     // ======================
     // PREPARE THE IK PROBLEM
     // ======================
-
-    // Get the orientation of the links from the input data
-    if (!pImpl->getLinkOrientationFromInputData(pImpl->linkRotationMatrices)) {
-        yError() << LogPrefix << "Failed to get link orientations from input data";
-        askToStop();
-        return;
-    }
 
     // Set the link orientations as IK targets
     for (size_t linkIndex = 0; linkIndex < pImpl->humanModel.getNrOfLinks(); ++linkIndex) {
@@ -500,7 +521,9 @@ void HumanStateProvider::run()
 
         // Move the solution to the struct used from exposing the data through the interface
         iDynTree::Transform baseTransformSolution;
-        pImpl->ik.getFullJointsSolution(baseTransformSolution, pImpl->jointConfigurationSolution);
+//        pImpl->ik.getFullJointsSolution(baseTransformSolution, pImpl->jointConfigurationSolution);
+        baseTransformSolution = baseTransform;
+        pImpl->jointConfigurationSolution = pImpl->jointAngles;
 
         for (unsigned i = 0; i < pImpl->jointConfigurationSolution.size(); ++i) {
             pImpl->solution.jointPositions[i] = pImpl->jointConfigurationSolution.getVal(i);
@@ -572,45 +595,58 @@ bool HumanStateProvider::impl::getLinkOrientationFromInputData(
 
 bool HumanStateProvider::impl::getJointAnglesFromInputData(iDynTree::VectorDynSize& jointAngles)
 {
-    for (const auto& jointMapEntry : wearableStorage.modelToWearable_JointInfo) {
-        const ModelJointName& modelJointName = jointMapEntry.first;
-        const WearableJointInfo& wearableJointInfo = jointMapEntry.second;
+    for (const auto& jointMapEntry : wearableStorage.wearableToModel_SphericalJoint) {
+        const WearableJointName& wearableJointName = jointMapEntry.first;
+        const ModelSphericalLink& modelSphericalLink = jointMapEntry.second;
+        std::string parentLinkName = modelSphericalLink.parent;
+        std::string childLinkName = modelSphericalLink.child;
 
-        if (wearableStorage.jointSensorsMap.find(wearableJointInfo.name)
+
+        if (wearableStorage.jointSensorsMap.find(wearableJointName)
                 == wearableStorage.jointSensorsMap.end()
-            || !wearableStorage.jointSensorsMap.at(wearableJointInfo.name)) {
-            yError() << LogPrefix << "Failed to get" << wearableJointInfo.name
+            || !wearableStorage.jointSensorsMap.at(wearableJointName)) {
+            yError() << LogPrefix << "Failed to get" << wearableJointName
                      << "sensor from the device. Something happened after configuring it.";
             return false;
         }
 
-        const wearable::SensorPtr<const sensor::IVirtualSphericalJointKinSensor> sensor =
-            wearableStorage.jointSensorsMap.at(wearableJointInfo.name);
-
-        if (!sensor) {
-            yError() << LogPrefix << "Sensor" << wearableJointInfo.name
-                     << "has been added but not properly configured";
+        if (wearableStorage.modelToWearable_LinkName.find(parentLinkName)
+                == wearableStorage.modelToWearable_LinkName.end() ) {
+            yError() << LogPrefix << "Failed to get" << parentLinkName
+                     << " link from wearable. Something happened after configuring it.";
             return false;
         }
 
-        if (sensor->getSensorStatus() != sensor::SensorStatus::Ok) {
-            yError() << LogPrefix << "The sensor status of " << sensor->getSensorName()
-                     << " is not ok (" << static_cast<double>(sensor->getSensorStatus()) << ")";
+        if (wearableStorage.modelToWearable_LinkName.find(childLinkName)
+                == wearableStorage.modelToWearable_LinkName.end() ) {
+            yError() << LogPrefix << "Failed to get" << childLinkName
+                     << " link from wearable. Something happened after configuring it.";
             return false;
         }
 
-        Vector3 anglesXYZ;
-        if (!sensor->getJointAnglesAsRPY(anglesXYZ)) {
-            yError() << LogPrefix << "Failed to read joint angles from virtual joint sensor";
+        if (linkRotationMatrices.find(parentLinkName) == linkRotationMatrices.end()) {
+            yError() << LogPrefix << "Failed to find rotation matrix for link" << parentLinkName;
             return false;
         }
+        iDynTree::Rotation parentLinkRotationMatrix = linkRotationMatrices.at(parentLinkName);
 
-        // Since anglesXYZ describes a spherical joint, take the right component
-        // (specified in the configuration file)
-        // TODO: we still need to validate the Xsens convention. Particularly, the zeros of
-        //       the joint angles might be different.
-        jointAngles.setVal(humanModel.getJointIndex(modelJointName),
-                           anglesXYZ[wearableJointInfo.index]);
+        if (linkRotationMatrices.find(childLinkName) == linkRotationMatrices.end()) {
+            yError() << LogPrefix << "Failed to find rotation matrix for link" << childLinkName;
+            return false;
+        }
+        iDynTree::Rotation childLinkRotationMatrix = linkRotationMatrices.at(childLinkName);
+
+        // Compute Joint rotation matrix and angles
+        // ===========================================
+        iDynTree::Rotation jointRotationMatrix = childLinkRotationMatrix * parentLinkRotationMatrix.inverse();
+        iDynTree::Vector3 jointAnglesFromMatrix = jointRotationMatrix.asRPY();
+
+        jointAngles.setVal(humanModel.getJointIndex(modelSphericalLink.jointName_x),
+                           jointAnglesFromMatrix.getVal(0));
+        jointAngles.setVal(humanModel.getJointIndex(modelSphericalLink.jointName_y),
+                           jointAnglesFromMatrix.getVal(1));
+        jointAngles.setVal(humanModel.getJointIndex(modelSphericalLink.jointName_z),
+                           jointAnglesFromMatrix.getVal(2));
     }
 
     return true;
@@ -689,38 +725,39 @@ bool HumanStateProvider::attach(yarp::dev::PolyDriver* poly)
     // CHECK JOINTS
     // ============
 
-    if (pImpl->useXsensJointsAngles) {
-        yDebug() << "Checking joints";
+    // TODO: to be removed or changed
+//    if (pImpl->useXsensJointsAngles) {
+//        yDebug() << "Checking joints";
 
-        for (size_t jointIndex = 0; jointIndex < pImpl->humanModel.getNrOfJoints(); ++jointIndex) {
-            // Get the name of the joint from the model and its prefix from iWear
-            std::string modelJointName = pImpl->humanModel.getJointName(jointIndex);
+//        for (size_t jointIndex = 0; jointIndex < pImpl->humanModel.getNrOfJoints(); ++jointIndex) {
+//            // Get the name of the joint from the model and its prefix from iWear
+//            std::string modelJointName = pImpl->humanModel.getJointName(jointIndex);
 
-            // Urdfs don't have support of spherical joints, IWear instead does.
-            // We use the configuration for addressing this mismatch.
-            if (pImpl->wearableStorage.modelToWearable_JointInfo.find(modelJointName)
-                == pImpl->wearableStorage.modelToWearable_JointInfo.end()) {
-                yWarning() << LogPrefix << "Failed to find" << modelJointName
-                           << "entry in the configuration map. Skipping this joint.";
-                continue;
-            }
+//            // Urdfs don't have support of spherical joints, IWear instead does.
+//            // We use the configuration for addressing this mismatch.
+//            if (pImpl->wearableStorage.modelToWearable_JointInfo.find(modelJointName)
+//                == pImpl->wearableStorage.modelToWearable_JointInfo.end()) {
+//                yWarning() << LogPrefix << "Failed to find" << modelJointName
+//                           << "entry in the configuration map. Skipping this joint.";
+//                continue;
+//            }
 
-            // Get the name of the sensor associate to the joint
-            std::string wearableJointName =
-                pImpl->wearableStorage.modelToWearable_JointInfo.at(modelJointName).name;
+//            // Get the name of the sensor associate to the joint
+//            std::string wearableJointName =
+//                pImpl->wearableStorage.modelToWearable_JointInfo.at(modelJointName).name;
 
-            // Try to get the sensor
-            auto sensor = pImpl->iWear->getVirtualSphericalJointKinSensor(wearableJointName);
-            if (!sensor) {
-                yError() << LogPrefix << "Failed to find sensor associated with joint"
-                         << wearableJointName << "from the IWear interface";
-                return false;
-            }
+//            // Try to get the sensor
+//            auto sensor = pImpl->iWear->getVirtualSphericalJointKinSensor(wearableJointName);
+//            if (!sensor) {
+//                yError() << LogPrefix << "Failed to find sensor associated with joint"
+//                         << wearableJointName << "from the IWear interface";
+//                return false;
+//            }
 
-            // Create a sensor map entry using the wearable sensor name as key
-            pImpl->wearableStorage.jointSensorsMap[wearableJointName] = sensor;
-        }
-    }
+//            // Create a sensor map entry using the wearable sensor name as key
+//            pImpl->wearableStorage.jointSensorsMap[wearableJointName] = sensor;
+//        }
+//    }
 
     // ====
     // MISC
