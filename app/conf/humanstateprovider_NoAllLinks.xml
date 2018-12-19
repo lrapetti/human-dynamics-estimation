@@ -28,11 +28,7 @@
     <!-- TODO: How to use a reduced model in the entire HDE? (Starting from HumanStateProvider) -->
     <group name="MODEL_TO_DATA_LINK_NAMES">
         <param name="map_Pelvis">(Pelvis, XsensSuit::vLink::Pelvis)</param>
-        <param name="map_L5">(L5, XsensSuit::vLink::L5)</param>
-        <param name="map_L3">(L3, XsensSuit::vLink::L3)</param>
-        <param name="map_T12">(T12, XsensSuit::vLink::T12)</param>
         <param name="map_T8">(T8, XsensSuit::vLink::T8)</param>
-        <param name="map_Neck">(Neck, XsensSuit::vLink::Neck)</param>
         <param name="map_Head">(Head, XsensSuit::vLink::Head)</param>
         <param name="map_RightShoulder">(RightShoulder, XsensSuit::vLink::RightShoulder)</param>
         <param name="map_RightUpperArm">(RightUpperArm, XsensSuit::vLink::RightUpperArm)</param>
@@ -45,11 +41,9 @@
         <param name="map_RightUpperLeg">(RightUpperLeg, XsensSuit::vLink::RightUpperLeg)</param>
         <param name="map_RightLowerLeg">(RightLowerLeg, XsensSuit::vLink::RightLowerLeg)</param>
         <param name="map_RightFoot">(RightFoot, XsensSuit::vLink::RightFoot)</param>
-        <param name="map_RightToe">(RightToe, XsensSuit::vLink::RightToe)</param>
         <param name="map_LeftUpperLeg">(LeftUpperLeg, XsensSuit::vLink::LeftUpperLeg)</param>
         <param name="map_LeftLowerLeg">(LeftLowerLeg, XsensSuit::vLink::LeftLowerLeg)</param>
         <param name="map_LeftFoot">(LeftFoot, XsensSuit::vLink::LeftFoot)</param>
-        <param name="map_LeftToe">(LeftToe, XsensSuit::vLink::LeftToe)</param>
     </group>
     <group name="MODEL_TO_DATA_JOINT_NAMES">
        <!-- TODO: this groups is here for configuring the data that might initialize the IK. -->

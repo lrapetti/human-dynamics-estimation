@@ -16,8 +16,8 @@
 </device>
 
 <device type="human_dynamics_estimator" name="HumanDynamicsEstimator">
-    <param name="period">0.100</param>
-    <param name="urdf">Claudia66DoF.urdf</param>
+    <param name="period">0.0200</param>
+    <param name="urdf">Claudia66DoF_PILimit.urdf</param>
     <param name="baseLink">Pelvis</param>
     <group name="PRIORS">
         <param name="cov_dyn_variables">10000.0</param>
@@ -40,8 +40,8 @@
 </device>
 
 <device type="human_state_provider" name="HumanStateProvider">
-    <param name="period">0.100</param>
-    <param name="urdf">Claudia66DoF.urdf</param>
+    <param name="period">0.0200</param>
+    <param name="urdf">Claudia66DoF_PILimit.urdf</param>
     <param name="floatingBaseFrame">(Pelvis, XsensSuit::vLink::Pelvis)</param>
     <param name="allowIKFailures">true</param>
     <param name="maxIterationsIK">500</param>

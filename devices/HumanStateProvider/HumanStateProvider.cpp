@@ -314,11 +314,13 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     {
         using namespace iDynTree;
 
-        pImpl->ik.setVerbosity(1); // TODO
+        pImpl->ik.setVerbosity(1);
         pImpl->ik.setMaxIterations(maxIterationsIK);
+        // TODO
         //        pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationQuaternion);
         pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationRollPitchYaw);
         pImpl->ik.setCostTolerance(costTolerance);
+        // pImpl->ik.setConstraintsTolerance(const 1000);
 
         if (!pImpl->ik.setModel(pImpl->humanModel)) {
             yError() << LogPrefix << "IK: failed to load the model";
@@ -331,10 +333,13 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
             return false;
         }
 
+        // TODO
         // Use targets only as targets (in the cost)
         pImpl->ik.setDefaultTargetResolutionMode(InverseKinematicsTreatTargetAsConstraintNone);
         // pImpl->ik.setDefaultTargetResolutionMode(
         //     InverseKinematicsTreatTargetAsConstraintRotationOnly);
+        // pImpl->ik.setDefaultTargetResolutionMode(
+        //     InverseKinematicsTreatTargetAsConstraintFull);
     }
 
     return true;
@@ -359,6 +364,8 @@ void HumanStateProvider::run()
             }
 
             iDynTree::Rotation dummyRotation;
+            // TODO choose weight for rotation target
+            // if (!pImpl->ik.addRotationTarget(linkName, dummyRotation, 1.0)) {
             if (!pImpl->ik.addRotationTarget(linkName, dummyRotation)) {
                 yError() << LogPrefix << "Failed to add rotation target for link" << linkName;
                 askToStop();
@@ -420,10 +427,24 @@ void HumanStateProvider::run()
         askToStop();
         return;
     }
+    // TODO add a postural task
+    // iDynTree::VectorDynSize posturalTaskJointAngles;
+    // posturalTaskJointAngles.resize(pImpl->jointAngles.size());
+    // posturalTaskJointAngles.zero();
+    // if (!pImpl->ik.setDesiredFullJointsConfiguration(posturalTaskJointAngles,1.0)) {
+    //      yError() << LogPrefix << "Failed to set the postural configuration of the IK";
+    //      askToStop();
+    //      return;
+    //  }
 
-    // TODO: postural. This can be moved after the IK finds a solution and it could
-    //       substitute setting the initial condition.
-    // if (!pImpl->ik.setDesiredFullJointsConfiguration(pImpl->jointAngles)) {
+    // TODO instead of initialization, use initial condition as preferred joint configuration
+    // pImpl->jointAngles.zero();
+    // if (!pImpl->ik.setFullJointsInitialCondition(&baseTransform, &pImpl->jointAngles)) {
+    //     yError() << LogPrefix << "Failed to set the joint configuration for initializing the IK";
+    //     askToStop();
+    //     return;
+    // }
+    // if (!pImpl->ik.setDesiredFullJointsConfiguration(pImpl->jointAngles,0.1)) {
     //     yError() << LogPrefix << "Failed to set the postural configuration of the IK";
     //     askToStop();
     //     return;
