@@ -478,6 +478,9 @@ void HumanStateProvider::run()
     if (!pImpl->ik.solve()) {
         if (pImpl->allowIKFailures) {
             yWarning() << LogPrefix << "IK failed, keeping the previous solution";
+            auto tock = std::chrono::high_resolution_clock::now();
+            yDebug() << LogPrefix << "IK took [ms]:"
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(tock - tick).count();
             return;
         }
         else {
@@ -488,7 +491,7 @@ void HumanStateProvider::run()
     }
 
     auto tock = std::chrono::high_resolution_clock::now();
-    yDebug() << LogPrefix << "IK took"
+    yDebug() << LogPrefix << "IK took [ms]:"
              << std::chrono::duration_cast<std::chrono::milliseconds>(tock - tick).count() << "ms";
 
     // ===========================
