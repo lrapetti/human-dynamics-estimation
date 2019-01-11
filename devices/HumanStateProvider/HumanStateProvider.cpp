@@ -317,10 +317,10 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
         pImpl->ik.setVerbosity(1);
         pImpl->ik.setMaxIterations(maxIterationsIK);
         // TODO
-        //        pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationQuaternion);
+        // pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationQuaternion);
         pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationRollPitchYaw);
         pImpl->ik.setCostTolerance(costTolerance);
-        // pImpl->ik.setConstraintsTolerance(const 1000);
+        // pImpl->ik.setConstraintsTolerance(50);
 
         if (!pImpl->ik.setModel(pImpl->humanModel)) {
             yError() << LogPrefix << "IK: failed to load the model";
@@ -427,15 +427,22 @@ void HumanStateProvider::run()
         askToStop();
         return;
     }
-    // TODO add a postural task
-    // iDynTree::VectorDynSize posturalTaskJointAngles;
-    // posturalTaskJointAngles.resize(pImpl->jointAngles.size());
-    // posturalTaskJointAngles.zero();
-    // if (!pImpl->ik.setDesiredFullJointsConfiguration(posturalTaskJointAngles,1.0)) {
-    //      yError() << LogPrefix << "Failed to set the postural configuration of the IK";
-    //      askToStop();
-    //      return;
-    //  }
+    // TODO add a postural task, two options:
+    // (1) zero angles postural task
+    iDynTree::VectorDynSize posturalTaskJointAngles;
+    posturalTaskJointAngles.resize(pImpl->jointAngles.size());
+    posturalTaskJointAngles.zero();
+    if (!pImpl->ik.setDesiredFullJointsConfiguration(posturalTaskJointAngles,1.0)) {
+         yError() << LogPrefix << "Failed to set the postural configuration of the IK";
+         askToStop();
+         return;
+     }
+    // (2) previous configuration
+//    if (!pImpl->ik.setDesiredFullJointsConfiguration(pImpl->jointAngles,1.0)) {
+//         yError() << LogPrefix << "Failed to set the postural configuration of the IK";
+//         askToStop();
+//         return;
+//     }
 
     // TODO instead of initialization, use initial condition as preferred joint configuration
     // pImpl->jointAngles.zero();
