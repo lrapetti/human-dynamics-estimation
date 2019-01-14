@@ -316,7 +316,7 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
 
         pImpl->ik.setVerbosity(1); // TODO
         pImpl->ik.setMaxIterations(maxIterationsIK);
-        //        pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationQuaternion);
+        // pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationQuaternion);
         pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationRollPitchYaw);
         pImpl->ik.setCostTolerance(costTolerance);
 
@@ -423,11 +423,12 @@ void HumanStateProvider::run()
 
     // TODO: postural. This can be moved after the IK finds a solution and it could
     //       substitute setting the initial condition.
-    // if (!pImpl->ik.setDesiredFullJointsConfiguration(pImpl->jointAngles)) {
-    //     yError() << LogPrefix << "Failed to set the postural configuration of the IK";
-    //     askToStop();
-    //     return;
-    // }
+    pImpl->jointAngles.zero();
+    if (!pImpl->ik.setDesiredFullJointsConfiguration(pImpl->jointAngles, 0.1)) {
+        yError() << LogPrefix << "Failed to set the postural configuration of the IK";
+        askToStop();
+        return;
+    }
 
     // ======================
     // PREPARE THE IK PROBLEM
