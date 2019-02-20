@@ -317,9 +317,10 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
         pImpl->ik.setVerbosity(1);
         pImpl->ik.setMaxIterations(maxIterationsIK);
         // TODO
-        // pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationQuaternion);
-        pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationRollPitchYaw);
+        pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationQuaternion);
+        // pImpl->ik.setRotationParametrization(InverseKinematicsRotationParametrizationRollPitchYaw);
         pImpl->ik.setCostTolerance(costTolerance);
+        pImpl->ik.setLinearSolverName("ma27");
         // pImpl->ik.setConstraintsTolerance(50);
 
         if (!pImpl->ik.setModel(pImpl->humanModel)) {
@@ -432,7 +433,7 @@ void HumanStateProvider::run()
     iDynTree::VectorDynSize posturalTaskJointAngles;
     posturalTaskJointAngles.resize(pImpl->jointAngles.size());
     posturalTaskJointAngles.zero();
-    if (!pImpl->ik.setDesiredFullJointsConfiguration(posturalTaskJointAngles,1.0)) {
+    if (!pImpl->ik.setDesiredFullJointsConfiguration(posturalTaskJointAngles,0.3)) {
          yError() << LogPrefix << "Failed to set the postural configuration of the IK";
          askToStop();
          return;
@@ -531,15 +532,23 @@ void HumanStateProvider::run()
 
         // Move the solution to the struct used from exposing the data through the interface
         iDynTree::Transform baseTransformSolution;
+        // TODO
+        // OR use the base transform from the solution
         pImpl->ik.getFullJointsSolution(baseTransformSolution, pImpl->jointConfigurationSolution);
+        // use directly the base transform baseTransform
+        // pImpl->ik.getFullJointsSolution(baseTransform, pImpl->jointConfigurationSolution);
 
         for (unsigned i = 0; i < pImpl->jointConfigurationSolution.size(); ++i) {
             pImpl->solution.jointPositions[i] = pImpl->jointConfigurationSolution.getVal(i);
         }
 
-        pImpl->solution.basePosition = {baseTransformSolution.getPosition().getVal(0),
-                                        baseTransformSolution.getPosition().getVal(1),
-                                        baseTransformSolution.getPosition().getVal(2)};
+//        pImpl->solution.basePosition = {baseTransformSolution.getPosition().getVal(0),
+//                                        baseTransformSolution.getPosition().getVal(1),
+//                                        baseTransformSolution.getPosition().getVal(2)};
+
+        pImpl->solution.basePosition = {baseTransform.getPosition().getVal(0),
+                                        baseTransform.getPosition().getVal(1),
+                                        baseTransform.getPosition().getVal(2)};
 
         pImpl->solution.baseOrientation = {
             baseTransformSolution.getRotation().asQuaternion().getVal(0),

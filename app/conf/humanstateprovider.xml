@@ -18,7 +18,7 @@
 <device type="human_state_provider" name="HumanStateProvider">
     <param name="period">0.05</param>
     <!-- <param name="urdf">Claudia66DoF_noLimit.urdf</param> -->
-    <param name="urdf">Claudia48DoF_PILimit.urdf</param>
+    <param name="urdf">Claudia66DoF_PILimit.urdf</param>
     <!-- <param name="urdf">Claudia66DoF_e16Limit.urdf</param> -->
     <param name="floatingBaseFrame">(Pelvis, XsensSuit::vLink::Pelvis)</param>
     <param name="allowIKFailures">true</param>
