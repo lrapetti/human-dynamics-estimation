@@ -156,7 +156,7 @@ bool HumanStateWrapper::attach(yarp::dev::PolyDriver* poly)
     // ===================
     // CHECK THE INTERFACE
     // ===================
-
+yInfo()<<pImpl->humanState->getNumberOfJoints() <<" "<< pImpl->humanState->getJointNames().size();
     if (pImpl->humanState->getNumberOfJoints() == 0
         || pImpl->humanState->getNumberOfJoints() != pImpl->humanState->getJointNames().size()) {
         yError() << "The IHumanState interface might not be ready";
