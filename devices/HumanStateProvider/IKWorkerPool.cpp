@@ -6,7 +6,7 @@
  * GNU Lesser General Public License v2.1 or any later version.
  */
 
-#include "HumanIKWorkerPool.h"
+#include "IKWorkerPool.h"
 
 #include <yarp/os/LogStream.h>
 
@@ -14,9 +14,9 @@
 
 #include <thread>
 
-const std::string IKLogPrefix = "HumanIKWorkerPool :";
+const std::string IKLogPrefix = "IKWorkerPool :";
 
-HumanIKWorkerPool::HumanIKWorkerPool(int size,
+IKWorkerPool::IKWorkerPool(int size,
                                      std::vector<LinkPairInfo> &linkPairs,
                                      std::vector<SegmentInfo> &segments)
     : m_linkPairs(linkPairs)
@@ -40,11 +40,11 @@ HumanIKWorkerPool::HumanIKWorkerPool(int size,
     //another container and manually manage the FIFO behaviour
 
     for (unsigned i = 0; i < static_cast<unsigned>(size); ++i) {
-        std::thread(&HumanIKWorkerPool::worker, this).detach();
+        std::thread(&IKWorkerPool::worker, this).detach();
     }
 }
 
-HumanIKWorkerPool::~HumanIKWorkerPool()
+IKWorkerPool::~IKWorkerPool()
 {
     m_terminateCounter.resize(m_poolSize);
     m_terminateCounter.assign(m_poolSize, true); //dummy
@@ -56,7 +56,7 @@ HumanIKWorkerPool::~HumanIKWorkerPool()
     m_inputSynchronizer.wait(lock, [&]() {return m_terminateCounter.empty(); });
 }
 
-void HumanIKWorkerPool::runAndWait()
+void IKWorkerPool::runAndWait()
 {
     // Fill data for a thread
     {
@@ -83,7 +83,7 @@ void HumanIKWorkerPool::runAndWait()
     m_outputSynchronizer.notify_all();
 }
 
-int HumanIKWorkerPool::computeIK(WorkerTaskData& task)
+int IKWorkerPool::computeIK(WorkerTaskData& task)
 {
     // Get floating base transformation from the pair model
     task.pairInfo.floatingBaseTransform = task.pairInfo.pairModel.getFrameTransform(task.pairInfo.floatingBaseIndex).inverse();
@@ -124,7 +124,7 @@ int HumanIKWorkerPool::computeIK(WorkerTaskData& task)
     return result;
 }
 
-void HumanIKWorkerPool::computeJointVelocities(WorkerTaskData& task, iDynTree::Twist& relativeVelocity)
+void IKWorkerPool::computeJointVelocities(WorkerTaskData& task, iDynTree::Twist& relativeVelocity)
 {
     // Update kinDynComputations object
     iDynTree::Vector3 worldGravity;
@@ -153,7 +153,7 @@ void HumanIKWorkerPool::computeJointVelocities(WorkerTaskData& task, iDynTree::T
     iDynTree::toEigen(task.pairInfo.jointVelocities) = task.pairInfo.jacobianDecomposition.solve(iDynTree::toEigen(relativeVelocity));
 }
 
-void HumanIKWorkerPool::worker() {
+void IKWorkerPool::worker() {
     //Preallocate some thread-local variables to be used in the computation
     iDynTree::Twist relativeVelocity;
 
