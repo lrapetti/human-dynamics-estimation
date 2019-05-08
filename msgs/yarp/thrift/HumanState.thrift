@@ -29,4 +29,9 @@ struct HumanState {
     5: Vector3 baseOriginWRTGlobal;
     6: Quaternion baseOrientationWRTGlobal;
     7: list<double> baseVelocityWRTGlobal;
+
+    8: list<string> linkNames;
+    9: string orientationErrorType;
+    10: list<double> orientationError;
+    11: list<double> angularVelocityError;
 }

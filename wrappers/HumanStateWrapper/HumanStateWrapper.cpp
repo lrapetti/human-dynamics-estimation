@@ -94,6 +94,12 @@ void HumanStateWrapper::run()
     std::vector<std::string> jointNames = pImpl->iHumanState->getJointNames();
     std::string baseName = pImpl->iHumanState->getBaseName();
 
+    std::vector<std::string> linkNames = pImpl->iHumanState->getLinkNames();
+    std::string orientationErrorType = pImpl->iHumanState->getOrientationErrorType();
+    std::vector<double> orientationError = pImpl->iHumanState->getOrientationError();
+    std::vector<double> angularVelocityError = pImpl->iHumanState->getAngularVelocityError();
+
+
     // Prepare the message
     human::HumanState& humanStateData = pImpl->outputPort.prepare();
 

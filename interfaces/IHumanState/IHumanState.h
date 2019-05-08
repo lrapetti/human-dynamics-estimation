@@ -24,17 +24,21 @@ class hde::interfaces::IHumanState
 public:
     virtual ~IHumanState() = default;
 
-    virtual std::vector<std::string> getJointNames() const = 0;
-    virtual std::string getBaseName() const = 0;
     virtual size_t getNumberOfJoints() const = 0;
 
+    virtual std::vector<std::string> getJointNames() const = 0;
     virtual std::vector<double> getJointPositions() const = 0;
     virtual std::vector<double> getJointVelocities() const = 0;
 
+    virtual std::string getBaseName() const = 0;
     virtual std::array<double, 3> getBasePosition() const = 0;
     virtual std::array<double, 4> getBaseOrientation() const = 0;
-
     virtual std::array<double, 6> getBaseVelocity() const = 0;
+
+    virtual std::vector<std::string> getLinkNames() const = 0;
+    virtual std::string getOrientationErrorType() const = 0;
+    virtual std::vector<double> getOrientationError() const = 0;
+    virtual std::vector<double> getAngularVelocityError() const = 0;
 };
 
 #endif // HDE_INTERFACES_IHUMANSTATE
