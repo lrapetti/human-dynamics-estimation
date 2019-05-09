@@ -16,7 +16,6 @@
 #include <iDynTree/ModelIO/ModelLoader.h>
 #include <yarp/os/LogStream.h>
 #include <yarp/os/ResourceFinder.h>
-
 #include <iDynTree/Core/EigenHelpers.h>
 #include <iDynTree/Model/Traversal.h>
 
@@ -702,6 +701,10 @@ void HumanStateProvider::run()
                                         pImpl->baseTransformSolution.getPosition().getVal(1),
                                         pImpl->baseTransformSolution.getPosition().getVal(2)};
 
+//        pImpl->solution.basePosition = {0,
+//                                        0,
+//                                        0.98};
+
         pImpl->solution.baseOrientation = {
             pImpl->baseTransformSolution.getRotation().asQuaternion().getVal(0),
             pImpl->baseTransformSolution.getRotation().asQuaternion().getVal(1),
@@ -709,13 +712,26 @@ void HumanStateProvider::run()
             pImpl->baseTransformSolution.getRotation().asQuaternion().getVal(3),
         };
 
+//        pImpl->solution.baseOrientation = {
+//                    1,
+//                    0,
+//                    0,
+//                    0,
+//                };
+
         // Use measured base frame velocity
+//        pImpl->solution.baseVelocity = {pImpl->baseVelocitySolution.getVal(0),
+//                                        pImpl->baseVelocitySolution.getVal(1),
+//                                        pImpl->baseVelocitySolution.getVal(2),
+//                                        pImpl->baseVelocitySolution.getVal(3),
+//                                        pImpl->baseVelocitySolution.getVal(4),
+//                                        pImpl->baseVelocitySolution.getVal(5)};
         pImpl->solution.baseVelocity = {pImpl->baseVelocitySolution.getVal(0),
-                                        pImpl->baseVelocitySolution.getVal(1),
-                                        pImpl->baseVelocitySolution.getVal(2),
-                                        pImpl->baseVelocitySolution.getVal(3),
-                                        pImpl->baseVelocitySolution.getVal(4),
-                                        pImpl->baseVelocitySolution.getVal(5)};
+                                                pImpl->baseVelocitySolution.getVal(1),
+                                                pImpl->baseVelocitySolution.getVal(2),
+                                                pImpl->baseVelocitySolution.getVal(3),
+                                                pImpl->baseVelocitySolution.getVal(4),
+                                                pImpl->baseVelocitySolution.getVal(5)};
     }
 
     // compute the inverse kinematic errors (currently the result is unused, but it may be used for evaluating the IK performance)
@@ -1293,7 +1309,7 @@ bool HumanStateProvider::impl::solveIntegrationBasedInverseKinematics()
            linearVelocityError = computations->getWorldTransform(humanModel.getFrameIndex(linkName)).getPosition() - linkTransformMatrices[linkName].getPosition();
            iDynTree::toEigen(integralLinearVelocityError) = iDynTree::toEigen(integralLinearVelocityError) +  iDynTree::toEigen(linearVelocityError) * dt;
            for (int i=0; i<3; i++) {
-               linkVelocities[linkName].setVal(i, 0 * linkVelocities[linkName].getVal(i) - integrationBasedIKLinearCorrectionGain * linearVelocityError.getVal(i) - integrationBasedIKIntegralLinearCorrectionGain * integralLinearVelocityError.getVal(i));
+               linkVelocities[linkName].setVal(i, linkVelocities[linkName].getVal(i) - integrationBasedIKLinearCorrectionGain * linearVelocityError.getVal(i) - integrationBasedIKIntegralLinearCorrectionGain * integralLinearVelocityError.getVal(i));
            }
         }
 
