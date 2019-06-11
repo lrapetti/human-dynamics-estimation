@@ -13,6 +13,8 @@
 #include <iDynTree/Core/EigenHelpers.h>
 #include <iDynTree/Core/VectorDynSize.h>
 #include <iDynTree/KinDynComputations.h>
+// osqp-eigen
+#include "OsqpEigen/OsqpEigen.h"
 
 // ====
 // IMPL
@@ -255,9 +257,53 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
     Eigen::DiagonalMatrix<double, Eigen::Dynamic> weightInverse(weightVector.size());
     weightInverse =
         Eigen::DiagonalMatrix<double, Eigen::Dynamic>(iDynTree::toEigen(weightVector)).inverse();
+    //********************* qp implementation
+    unsigned int taskSpaceSize = matrix.rows();
+    unsigned int configSpaceSize = matrix.cols();
 
-    if (resolutionMode == moorePenrose)
-    {
+    // generate P_prime matrix
+    Eigen::MatrixXd P = Eigen::MatrixXd::Identity(taskSpaceSize, taskSpaceSize);
+
+    Eigen::MatrixXd P_prime(taskSpaceSize + configSpaceSize, taskSpaceSize + configSpaceSize);
+
+    P_prime.topLeftCorner(configSpaceSize, configSpaceSize) =
+        Eigen::MatrixXd::Zero(configSpaceSize, configSpaceSize);
+    P_prime.topRightCorner(configSpaceSize, taskSpaceSize) =
+        Eigen::MatrixXd::Zero(configSpaceSize, taskSpaceSize);
+    P_prime.bottomLeftCorner(taskSpaceSize, configSpaceSize) =
+        Eigen::MatrixXd::Zero(taskSpaceSize, configSpaceSize);
+    P_prime.bottomRightCorner(taskSpaceSize, taskSpaceSize) = P;
+
+    // generate A_prime matrix for constraints
+    unsigned int NoOfconstraints = configSpaceSize;
+    Eigen::MatrixXd A = Eigen::MatrixXd::Identity(NoOfconstraints, NoOfconstraints);
+
+    Eigen::MatrixXd A_prime(NoOfconstraints + taskSpaceSize, configSpaceSize + taskSpaceSize);
+
+    A_prime.topLeftCorner(taskSpaceSize, configSpaceSize) = iDynTree::toEigen(matrix);
+    A_prime.topRightCorner(taskSpaceSize, taskSpaceSize) =
+        Eigen::MatrixXd::Identity(taskSpaceSize, taskSpaceSize);
+    A_prime.bottomLeftCorner(NoOfconstraints, configSpaceSize) = A;
+    A_prime.bottomRightCorner(NoOfconstraints, taskSpaceSize) =
+        Eigen::MatrixXd::Zero(NoOfconstraints, taskSpaceSize);
+    // generate upper limit vector (u_prime) and lower limit vector (l_prime)
+    Eigen::ArrayXd V = iDynTree::toEigen(inputVector);
+    double jointVelocityLimit = 10.0;
+
+    Eigen::ArrayXd U = Eigen::ArrayXd::Ones(NoOfconstraints, 1) * jointVelocityLimit;
+    Eigen::ArrayXd L = Eigen::ArrayXd::Ones(NoOfconstraints, 1) * -1.0 * jointVelocityLimit;
+
+    Eigen::ArrayXd u_prime(NoOfconstraints + taskSpaceSize);
+    u_prime.topRows(taskSpaceSize) = V;
+    u_prime.bottomRows(NoOfconstraints) = U;
+
+    Eigen::ArrayXd l_prime(NoOfconstraints + taskSpaceSize);
+    l_prime.topRows(taskSpaceSize) = V;
+    l_prime.bottomRows(NoOfconstraints) = L;
+
+    //**********************************
+
+    if (resolutionMode == moorePenrose) {
         iDynTree::toEigen(outputVector) =
             (iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                  * iDynTree::toEigen(matrix)
@@ -266,13 +312,11 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
             * iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
             * iDynTree::toEigen(inputVector);
     }
-    else if (resolutionMode == completeOrthogonalDecomposition)
-    {
+    else if (resolutionMode == completeOrthogonalDecomposition) {
         Eigen::CompleteOrthogonalDecomposition<
             Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
-            WeightedJacobian = (iDynTree::toEigen(matrix).transpose() *
-            weightInverse.toDenseMatrix()
-                                    * iDynTree::toEigen(matrix)
+            WeightedJacobian = (iDynTree::toEigen(matrix).transpose()
+                                    * weightInverse.toDenseMatrix() * iDynTree::toEigen(matrix)
                                 + iDynTree::toEigen(regularizationMatrix))
                                    .completeOrthogonalDecomposition();
         WeightedJacobian.setThreshold(1e-2);
@@ -283,8 +327,7 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
         std::cout << "rank: " << WeightedJacobian.rank()
                   << " threshhold: " << WeightedJacobian.threshold() << std::endl;
     }
-    else if (resolutionMode == leastSquare)
-    {
+    else if (resolutionMode == leastSquare) {
         iDynTree::toEigen(outputVector) =
             (iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                  * iDynTree::toEigen(matrix)
@@ -293,8 +336,7 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
                 .solve(iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                        * iDynTree::toEigen(inputVector));
     }
-    else if (resolutionMode == choleskyDecomposition)
-    {
+    else if (resolutionMode == choleskyDecomposition) {
         iDynTree::toEigen(outputVector) =
             (iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                  * iDynTree::toEigen(matrix)
@@ -303,8 +345,7 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
                 .solve(iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                        * iDynTree::toEigen(inputVector));
     }
-    else if (resolutionMode == sparseCholeskyDecomposition)
-    {
+    else if (resolutionMode == sparseCholeskyDecomposition) {
         Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> solver;
         solver.compute((iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                             * iDynTree::toEigen(matrix)
@@ -315,8 +356,7 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
             solver.solve(iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                          * iDynTree::toEigen(inputVector));
     }
-    else if (resolutionMode == robustCholeskyDecomposition)
-    {
+    else if (resolutionMode == robustCholeskyDecomposition) {
         iDynTree::toEigen(outputVector) =
             (iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                  * iDynTree::toEigen(matrix)
@@ -325,8 +365,7 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
                 .solve(iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                        * iDynTree::toEigen(inputVector));
     }
-    else if (resolutionMode == sparseRobustCholeskyDecomposition)
-    {
+    else if (resolutionMode == sparseRobustCholeskyDecomposition) {
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
         solver.compute((iDynTree::toEigen(matrix).transpose() * weightInverse.toDenseMatrix()
                             * iDynTree::toEigen(matrix)
@@ -655,14 +694,14 @@ bool InverseVelocityKinematics::setResolutionMode(
     return true;
 }
 
-bool InverseVelocityKinematics::setResolutionMode(
-    std::string resolutionModeName)
+bool InverseVelocityKinematics::setResolutionMode(std::string resolutionModeName)
 {
     if (resolutionModeName == "moorePenrose") {
         pImpl->resolutionMode = InverseVelocityKinematicsResolutionMode::moorePenrose;
     }
     else if (resolutionModeName == "completeOrthogonalDecomposition") {
-        pImpl->resolutionMode = InverseVelocityKinematicsResolutionMode::completeOrthogonalDecomposition;
+        pImpl->resolutionMode =
+            InverseVelocityKinematicsResolutionMode::completeOrthogonalDecomposition;
     }
     else if (resolutionModeName == "leastSquare") {
         pImpl->resolutionMode = InverseVelocityKinematicsResolutionMode::leastSquare;
@@ -671,13 +710,16 @@ bool InverseVelocityKinematics::setResolutionMode(
         pImpl->resolutionMode = InverseVelocityKinematicsResolutionMode::choleskyDecomposition;
     }
     else if (resolutionModeName == "sparseCholeskyDecomposition") {
-        pImpl->resolutionMode = InverseVelocityKinematicsResolutionMode::sparseCholeskyDecomposition;
+        pImpl->resolutionMode =
+            InverseVelocityKinematicsResolutionMode::sparseCholeskyDecomposition;
     }
     else if (resolutionModeName == "robustCholeskyDecomposition") {
-        pImpl->resolutionMode = InverseVelocityKinematicsResolutionMode::robustCholeskyDecomposition;
+        pImpl->resolutionMode =
+            InverseVelocityKinematicsResolutionMode::robustCholeskyDecomposition;
     }
     else if (resolutionModeName == "sparseRobustCholeskyDecomposition") {
-        pImpl->resolutionMode = InverseVelocityKinematicsResolutionMode::sparseRobustCholeskyDecomposition;
+        pImpl->resolutionMode =
+            InverseVelocityKinematicsResolutionMode::sparseRobustCholeskyDecomposition;
     }
     else {
         std::cerr << "[ERROR] Invalid resolution mode: " << resolutionModeName << std::endl;
@@ -760,14 +802,12 @@ bool InverseVelocityKinematics::setJointConfiguration(std::string jointName,
 
 bool InverseVelocityKinematics::setJointsConfiguration(iDynTree::VectorDynSize jointsConfiguration)
 {
-    if (pImpl->state.jointsConfiguration.size() == jointsConfiguration.size())
-    {
+    if (pImpl->state.jointsConfiguration.size() == jointsConfiguration.size()) {
         pImpl->state.jointsConfiguration = jointsConfiguration;
         pImpl->updateConfiguration();
         return true;
     }
-    else
-    {
+    else {
         return false;
     }
 }
@@ -793,13 +833,11 @@ bool InverseVelocityKinematics::setBasePose(iDynTree::Vector3 basePosition,
 bool InverseVelocityKinematics::setConfiguration(iDynTree::Transform baseTransform,
                                                  iDynTree::VectorDynSize jointsConfiguration)
 {
-    if (setJointsConfiguration(jointsConfiguration) && setBasePose(baseTransform))
-    {
+    if (setJointsConfiguration(jointsConfiguration) && setBasePose(baseTransform)) {
         pImpl->updateConfiguration();
         return true;
     }
-    else
-    {
+    else {
         return false;
     }
 }
@@ -808,16 +846,13 @@ bool InverseVelocityKinematics::setConfiguration(iDynTree::Vector3 basePosition,
                                                  iDynTree::Rotation baseRotation,
                                                  iDynTree::VectorDynSize jointsConfiguration)
 {
-    if (setJointsConfiguration(jointsConfiguration) && setBasePose(basePosition, baseRotation))
-    {
+    if (setJointsConfiguration(jointsConfiguration) && setBasePose(basePosition, baseRotation)) {
         pImpl->updateConfiguration();
         return true;
     }
-    else
-    {
+    else {
         return false;
     }
-
 }
 
 bool InverseVelocityKinematics::updateTarget(std::string linkName,
@@ -888,18 +923,16 @@ bool InverseVelocityKinematics::updateAngularVelocityTarget(std::string linkName
 bool InverseVelocityKinematics::getVelocitySolution(iDynTree::Twist& baseVelocity,
                                                     iDynTree::VectorDynSize& jointsVelocity)
 {
-  return getJointsVelocitySolution(jointsVelocity) && getBaseVelocitySolution(baseVelocity);
+    return getJointsVelocitySolution(jointsVelocity) && getBaseVelocitySolution(baseVelocity);
 }
 
 bool InverseVelocityKinematics::getJointsVelocitySolution(iDynTree::VectorDynSize& jointsVelocity)
 {
-    if (jointsVelocity.size() == pImpl->jointVelocityResult.size())
-    {
+    if (jointsVelocity.size() == pImpl->jointVelocityResult.size()) {
         jointsVelocity = pImpl->jointVelocityResult;
         return true;
     }
-    else
-    {
+    else {
         return false;
     }
 }
