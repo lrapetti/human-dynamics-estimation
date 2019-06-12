@@ -31,4 +31,8 @@ struct HumanState {
     7: list<double> baseVelocityWRTGlobal;
     8: Vector3 CoMPositionWRTGlobal;
     9: Vector3 CoMVelocityWRTGlobal;
+
+    10: double poseError;
+    11: double velocityError;
+    12: double computationTime;
 }

@@ -96,6 +96,10 @@ struct SolutionIK
     std::array<double, 3> CoMPosition;
     std::array<double, 3> CoMVelocity;
 
+    double poseError;
+    double velocityError;
+    double computationTime;
+
     void clear()
     {
         jointPositions.clear();
@@ -161,6 +165,9 @@ public:
     iDynTree::VectorDynSize jointVelocitiesSolution;
     iDynTree::Transform baseTransformSolution;
     iDynTree::Twist baseVelocitySolution;
+    double poseError;
+    double velocityError;
+    double computationTime;
 
     iDynTree::Vector3 integralOrientationError;
     iDynTree::Vector3 integralLinearVelocityError;
@@ -228,13 +235,13 @@ public:
     bool updateInverseVelocityKinematicTargets();
     bool addInverseVelocityKinematicsTargets();
 
-    bool computeLinksOrientationErrors(
+    double computeLinksOrientationErrors(
         std::unordered_map<std::string, iDynTree::Transform> linkDesiredOrientations,
         iDynTree::VectorDynSize jointConfigurations,
         iDynTree::Transform floatingBasePose,
         std::unordered_map<std::string, iDynTreeHelper::Rotation::rotationDistance>&
             linkErrorOrientations);
-    bool computeLinksAngularVelocityErrors(
+    double computeLinksAngularVelocityErrors(
         std::unordered_map<std::string, iDynTree::Twist> linkDesiredVelocities,
         iDynTree::VectorDynSize jointConfigurations,
         iDynTree::Transform floatingBasePose,
@@ -734,13 +741,13 @@ void HumanStateProvider::run()
     if (inverseKinematicsFailure) {
         if (pImpl->allowIKFailures) {
             yWarning() << LogPrefix << "IK failed, keeping the previous solution";
-            return;
+            // return;
         }
         else {
             yError() << LogPrefix << "Failed to solve IK";
             askToStop();
+            return;
         }
-        return;
     }
 
     auto tock = std::chrono::high_resolution_clock::now();
@@ -753,18 +760,48 @@ void HumanStateProvider::run()
         pImpl->baseVelocitySolution = measuredBaseVelocity;
     }
 
+    // compute the inverse kinematic errors (currently the result is unused, but it may be used for
+    // evaluating the IK performance)
+    pImpl->poseError = pImpl->computeLinksOrientationErrors(pImpl->linkTransformMatrices,
+                                                            pImpl->jointConfigurationSolution,
+                                                            pImpl->baseTransformSolution,
+                                                            pImpl->linkErrorOrientations);
+    pImpl->velocityError = pImpl->computeLinksAngularVelocityErrors(pImpl->linkVelocities,
+                                                                    pImpl->jointConfigurationSolution,
+                                                                    pImpl->baseTransformSolution,
+                                                                    pImpl->jointVelocitiesSolution,
+                                                                    pImpl->baseVelocitySolution,
+                                                                    pImpl->linkErrorAngularVelocities);
+    pImpl->computationTime = std::chrono::duration_cast<std::chrono::milliseconds>(tock - tick).count();
+
+    iDynTree::KinDynComputations* kindyncomputations = pImpl->kinDynComputations.get();
+    iDynTree::Vector3 CoMPosition = kindyncomputations->getCenterOfMassPosition();
+    iDynTree::Vector3 CoMVelocity = kindyncomputations->getCenterOfMassVelocity();
+
+
+
+
+
     // Expose IK solution for IHumanState
     {
         std::lock_guard<std::mutex> lock(pImpl->mutex);
+
+        pImpl->solution.poseError = pImpl->poseError;
+        pImpl->solution.velocityError = pImpl->velocityError;
+        pImpl->solution.computationTime = pImpl->computationTime;
 
         for (unsigned i = 0; i < pImpl->jointConfigurationSolution.size(); ++i) {
             pImpl->solution.jointPositions[i] = pImpl->jointConfigurationSolution.getVal(i);
             pImpl->solution.jointVelocities[i] = pImpl->jointVelocitiesSolution.getVal(i);
         }
 
-        pImpl->solution.basePosition = {pImpl->baseTransformSolution.getPosition().getVal(0),
-                                        pImpl->baseTransformSolution.getPosition().getVal(1),
-                                        pImpl->baseTransformSolution.getPosition().getVal(2)};
+//        pImpl->solution.basePosition = {pImpl->baseTransformSolution.getPosition().getVal(0),
+//                                        pImpl->baseTransformSolution.getPosition().getVal(1),
+//                                        pImpl->baseTransformSolution.getPosition().getVal(2)};
+
+        pImpl->solution.basePosition = {0,
+                                        0,
+                                        0};
 
         pImpl->solution.baseOrientation = {
             pImpl->baseTransformSolution.getRotation().asQuaternion().getVal(0),
@@ -780,30 +817,15 @@ void HumanStateProvider::run()
                                         pImpl->baseVelocitySolution.getVal(3),
                                         pImpl->baseVelocitySolution.getVal(4),
                                         pImpl->baseVelocitySolution.getVal(5)};
-    }
-    {
-        iDynTree::KinDynComputations* kindyncomputations = pImpl->kinDynComputations.get();
-        pImpl->solution.CoMPosition = {kindyncomputations->getCenterOfMassPosition().getVal(0),
-                                       kindyncomputations->getCenterOfMassPosition().getVal(1),
-                                       kindyncomputations->getCenterOfMassPosition().getVal(2)};
 
-        pImpl->solution.CoMVelocity = {kindyncomputations->getCenterOfMassVelocity().getVal(0),
-                                       kindyncomputations->getCenterOfMassVelocity().getVal(1),
-                                       kindyncomputations->getCenterOfMassVelocity().getVal(2)};
-    }
+        pImpl->solution.CoMPosition = {CoMPosition.getVal(0),
+                                       CoMPosition.getVal(1),
+                                       CoMPosition.getVal(2)};
 
-    // compute the inverse kinematic errors (currently the result is unused, but it may be used for
-    // evaluating the IK performance)
-    // pImpl->computeLinksOrientationErrors(pImpl->linkTransformMatrices,
-    //                                      pImpl->jointConfigurationSolution,
-    //                                      pImpl->baseTransformSolution,
-    //                                      pImpl->linkErrorOrientations);
-    // pImpl->computeLinksAngularVelocityErrors(pImpl->linkVelocities,
-    //                                          pImpl->jointConfigurationSolution,
-    //                                          pImpl->baseTransformSolution,
-    //                                          pImpl->jointVelocitiesSolution,
-    //                                          pImpl->baseVelocitySolution,
-    //                                          pImpl->linkErrorAngularVelocities);
+        pImpl->solution.CoMVelocity = {CoMVelocity.getVal(0),
+                                       CoMVelocity.getVal(1),
+                                       CoMVelocity.getVal(2)};
+    }
 }
 
 bool HumanStateProvider::impl::getLinkTransformFromInputData(
@@ -1151,6 +1173,7 @@ bool HumanStateProvider::impl::initializeGlobalInverseKinematicsSolver()
     globalIK.setLinearSolverName(linearSolverName);
     globalIK.setMaxIterations(maxIterationsIK);
     globalIK.setCostTolerance(costTolerance);
+    globalIK.setConstraintsTolerance(costTolerance);
     globalIK.setDefaultTargetResolutionMode(iDynTree::InverseKinematicsTreatTargetAsConstraintNone);
     globalIK.setRotationParametrization(
         iDynTree::InverseKinematicsRotationParametrizationRollPitchYaw);
@@ -1640,13 +1663,15 @@ bool HumanStateProvider::impl::addInverseVelocityKinematicsTargets()
     return true;
 }
 
-bool HumanStateProvider::impl::computeLinksOrientationErrors(
+double HumanStateProvider::impl::computeLinksOrientationErrors(
     std::unordered_map<std::string, iDynTree::Transform> linkDesiredTransforms,
     iDynTree::VectorDynSize jointConfigurations,
     iDynTree::Transform floatingBasePose,
     std::unordered_map<std::string, iDynTreeHelper::Rotation::rotationDistance>&
         linkErrorOrientations)
 {
+    double averageTraceError = 0;
+
     iDynTree::VectorDynSize zeroJointVelocities = jointConfigurations;
     zeroJointVelocities.zero();
 
@@ -1662,11 +1687,12 @@ bool HumanStateProvider::impl::computeLinksOrientationErrors(
         linkErrorOrientations[linkName] = iDynTreeHelper::Rotation::rotationDistance(
             computations->getWorldTransform(linkName).getRotation(),
             linkDesiredTransforms[linkName].getRotation());
+        averageTraceError = averageTraceError + linkErrorOrientations[linkName].asTrace();
     }
-    return true;
+    return (averageTraceError / (2 * linkDesiredTransforms.size()));
 }
 
-bool HumanStateProvider::impl::computeLinksAngularVelocityErrors(
+double HumanStateProvider::impl::computeLinksAngularVelocityErrors(
     std::unordered_map<std::string, iDynTree::Twist> linkDesiredVelocities,
     iDynTree::VectorDynSize jointConfigurations,
     iDynTree::Transform floatingBasePose,
@@ -1674,6 +1700,7 @@ bool HumanStateProvider::impl::computeLinksAngularVelocityErrors(
     iDynTree::Twist baseVelocity,
     std::unordered_map<std::string, iDynTree::Vector3>& linkAngularVelocityError)
 {
+    double angularVelocityMeanSquaredError = 0;
     iDynTree::KinDynComputations* computations = kinDynComputations.get();
     computations->setRobotState(
         floatingBasePose, jointConfigurations, baseVelocity, jointVelocities, worldGravity);
@@ -1683,9 +1710,11 @@ bool HumanStateProvider::impl::computeLinksAngularVelocityErrors(
         iDynTree::toEigen(linkAngularVelocityError[linkName]) =
             iDynTree::toEigen(linkDesiredVelocities[linkName].getLinearVec3())
             - iDynTree::toEigen(computations->getFrameVel(linkName).getLinearVec3());
+        angularVelocityMeanSquaredError = angularVelocityMeanSquaredError + linkAngularVelocityError[linkName].getVal(0) * linkAngularVelocityError[linkName].getVal(0) +
+                linkAngularVelocityError[linkName].getVal(1)  * linkAngularVelocityError[linkName].getVal(1) + linkAngularVelocityError[linkName].getVal(2) * linkAngularVelocityError[linkName].getVal(2);
     }
 
-    return true;
+    return (angularVelocityMeanSquaredError / (3 * linkDesiredVelocities.size()));
 }
 
 bool HumanStateProvider::attach(yarp::dev::PolyDriver* poly)
@@ -1918,6 +1947,24 @@ std::array<double, 3> HumanStateProvider::getCoMVelocity() const
 {
     std::lock_guard<std::mutex> lock(pImpl->mutex);
     return pImpl->solution.CoMVelocity;
+}
+
+double HumanStateProvider::getPoseError() const
+{
+    std::lock_guard<std::mutex> lock(pImpl->mutex);
+    return pImpl->solution.poseError;
+}
+
+double HumanStateProvider::getVelocityError() const
+{
+    std::lock_guard<std::mutex> lock(pImpl->mutex);
+    return pImpl->solution.velocityError;
+}
+
+double HumanStateProvider::getComputationTime() const
+{
+    std::lock_guard<std::mutex> lock(pImpl->mutex);
+    return pImpl->solution.computationTime;
 }
 
 // This method returns the all link pair names from the full human model

@@ -65,6 +65,9 @@ public:
     std::array<double, 6> getBaseVelocity() const override;
     std::array<double, 3> getCoMPosition() const override;
     std::array<double, 3> getCoMVelocity() const override;
+    double getPoseError() const override;
+    double getVelocityError() const override;
+    double getComputationTime() const override;
 };
 
 #endif // HDE_DEVICES_HUMANSTATEPROVIDER

@@ -85,6 +85,9 @@ void HumanStateWrapper::run()
 {
 
     // Get data from the interface
+    double poseError = pImpl->iHumanState->getPoseError();
+    double velocityError = pImpl->iHumanState->getVelocityError();
+    double computationTime = pImpl->iHumanState->getComputationTime();
     std::array<double, 3> CoMPositionInterface = pImpl->iHumanState->getCoMPosition();
     std::array<double, 3> CoMVelocityInterface = pImpl->iHumanState->getCoMVelocity();
     std::array<double, 3> basePositionInterface = pImpl->iHumanState->getBasePosition();
@@ -97,6 +100,10 @@ void HumanStateWrapper::run()
 
     // Prepare the message
     human::HumanState& humanStateData = pImpl->outputPort.prepare();
+
+    humanStateData.poseError = poseError;
+    humanStateData.velocityError = velocityError;
+    humanStateData.computationTime = computationTime;
 
     // Convert the COM position
     humanStateData.CoMPositionWRTGlobal = {

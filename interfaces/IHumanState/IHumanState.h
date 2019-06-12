@@ -38,6 +38,10 @@ public:
 
     virtual std::array<double, 3> getCoMPosition() const = 0;
     virtual std::array<double, 3> getCoMVelocity() const = 0;
+
+    virtual double getPoseError() const = 0;
+    virtual double getVelocityError() const = 0;
+    virtual double getComputationTime() const = 0;
 };
 
 #endif // HDE_INTERFACES_IHUMANSTATE
