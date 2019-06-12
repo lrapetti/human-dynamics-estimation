@@ -238,6 +238,12 @@ bool InverseVelocityKinematics::impl::solveProblem()
         jointVelocityResult.setVal(k, nu.getVal(k + 6));
     }
 
+    yInfo() << "IB-IK, normal: ";
+    for (int k = 0; k < nu.size(); k++) {
+        std::cout << nu.getVal(k) << " ";
+    }
+    std::cout << std::endl;
+
     return true;
 }
 
@@ -258,16 +264,20 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
     weightInverse =
         Eigen::DiagonalMatrix<double, Eigen::Dynamic>(iDynTree::toEigen(weightVector)).inverse();
     //********************* qp implementation
+    // check changing the matrixxd to sparse matrices if is faster or not!?
     unsigned int taskSpaceSize = matrix.rows();
     unsigned int configSpaceSize = matrix.cols();
+    unsigned int NoOfconstraints = configSpaceSize;
 
     // generate P_prime matrix
     Eigen::MatrixXd P = Eigen::MatrixXd::Identity(taskSpaceSize, taskSpaceSize);
 
     Eigen::MatrixXd P_prime(taskSpaceSize + configSpaceSize, taskSpaceSize + configSpaceSize);
 
+    //    P_prime.topLeftCorner(configSpaceSize, configSpaceSize) =
+    //        Eigen::MatrixXd::Zero(configSpaceSize, configSpaceSize);
     P_prime.topLeftCorner(configSpaceSize, configSpaceSize) =
-        Eigen::MatrixXd::Zero(configSpaceSize, configSpaceSize);
+        iDynTree::toEigen(regularizationMatrix).sparseView();
     P_prime.topRightCorner(configSpaceSize, taskSpaceSize) =
         Eigen::MatrixXd::Zero(configSpaceSize, taskSpaceSize);
     P_prime.bottomLeftCorner(taskSpaceSize, configSpaceSize) =
@@ -275,31 +285,84 @@ bool InverseVelocityKinematics::impl::solveWeightedPseudoInverse(
     P_prime.bottomRightCorner(taskSpaceSize, taskSpaceSize) = P;
 
     // generate A_prime matrix for constraints
-    unsigned int NoOfconstraints = configSpaceSize;
     Eigen::MatrixXd A = Eigen::MatrixXd::Identity(NoOfconstraints, NoOfconstraints);
 
     Eigen::MatrixXd A_prime(NoOfconstraints + taskSpaceSize, configSpaceSize + taskSpaceSize);
 
-    A_prime.topLeftCorner(taskSpaceSize, configSpaceSize) = iDynTree::toEigen(matrix);
+    A_prime.topLeftCorner(taskSpaceSize, configSpaceSize) = iDynTree::toEigen(matrix).sparseView();
     A_prime.topRightCorner(taskSpaceSize, taskSpaceSize) =
         Eigen::MatrixXd::Identity(taskSpaceSize, taskSpaceSize);
     A_prime.bottomLeftCorner(NoOfconstraints, configSpaceSize) = A;
     A_prime.bottomRightCorner(NoOfconstraints, taskSpaceSize) =
         Eigen::MatrixXd::Zero(NoOfconstraints, taskSpaceSize);
     // generate upper limit vector (u_prime) and lower limit vector (l_prime)
-    Eigen::ArrayXd V = iDynTree::toEigen(inputVector);
+    Eigen::VectorXd V = iDynTree::toEigen(inputVector);
     double jointVelocityLimit = 10.0;
 
-    Eigen::ArrayXd U = Eigen::ArrayXd::Ones(NoOfconstraints, 1) * jointVelocityLimit;
-    Eigen::ArrayXd L = Eigen::ArrayXd::Ones(NoOfconstraints, 1) * -1.0 * jointVelocityLimit;
+    Eigen::VectorXd U = Eigen::VectorXd::Ones(NoOfconstraints, 1) * jointVelocityLimit;
+    Eigen::VectorXd L = Eigen::VectorXd::Ones(NoOfconstraints, 1) * -1.0 * jointVelocityLimit;
 
-    Eigen::ArrayXd u_prime(NoOfconstraints + taskSpaceSize);
+    Eigen::VectorXd u_prime(NoOfconstraints + taskSpaceSize);
     u_prime.topRows(taskSpaceSize) = V;
     u_prime.bottomRows(NoOfconstraints) = U;
 
-    Eigen::ArrayXd l_prime(NoOfconstraints + taskSpaceSize);
+    Eigen::VectorXd l_prime(NoOfconstraints + taskSpaceSize);
     l_prime.topRows(taskSpaceSize) = V;
     l_prime.bottomRows(NoOfconstraints) = L;
+
+    OsqpEigen::Solver solver;
+    // solver.settings()->setVerbosity(false);
+    solver.settings()->setWarmStart(true);
+    solver.data()->setNumberOfVariables(taskSpaceSize + configSpaceSize);
+    solver.data()->setNumberOfConstraints(NoOfconstraints + taskSpaceSize);
+
+    Eigen::SparseMatrix<double> A_prime_sparse = A_prime.sparseView();
+    Eigen::SparseMatrix<double> P_prime_sparse = P_prime.sparseView();
+    Eigen::VectorXd q_prime(taskSpaceSize + configSpaceSize);
+    q_prime = Eigen::VectorXd::Zero(taskSpaceSize + configSpaceSize, 1);
+
+    // set A
+    if (!solver.data()->setLinearConstraintsMatrix(A_prime_sparse)) {
+        return 1;
+    }
+    // set U
+    if (!solver.data()->setUpperBound(u_prime)) {
+        return 1;
+    }
+    // set L
+    if (!solver.data()->setLowerBound(l_prime)) {
+        return 1;
+    }
+    // set P
+    if (!solver.data()->setHessianMatrix(P_prime_sparse)) {
+        return 1;
+    }
+
+    // set q
+    if (!solver.data()->setGradient(q_prime)) {
+        return 1;
+    }
+
+    if (!solver.initSolver()) {
+        return 1;
+    }
+
+    // controller QPSolution vector
+    Eigen::VectorXd QPSolution;
+
+    // solve the QP problem
+    if (!solver.solve()) {
+        return 1;
+    }
+
+    // get the controller input
+    QPSolution = solver.getSolution();
+    yInfo() << "IB-IK qp: ";
+    for (unsigned int i = 0; i < configSpaceSize; i++) {
+        std::cout << QPSolution.coeff(i, 0) << " ";
+    }
+    std::cout << std::endl;
+    iDynTree::toEigen(outputVector) = QPSolution.topRows(configSpaceSize);
 
     //**********************************
 
