@@ -4,7 +4,7 @@
 
 find_package(IWear REQUIRED)
 find_package(iDynTree REQUIRED)
-find_package(OsqpEigen REQUIRED)
+find_package(OsqpEigen 0.4.0 REQUIRED)
 
 
 yarp_prepare_plugin(human_state_provider
