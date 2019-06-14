@@ -48,6 +48,7 @@
         <param name="angVelTargetWeight">1.0</param>
         <!-- integration based IK parameters -->
         <param name='integrationBasedJointVelocityLimit'>10.0</param> <!-- comment or -1.0 for no limits -->
+        <param name='customConstraints'>icub_customized_constraints.ini</param>
         <param name="integrationBasedIKMeasuredVelocityGainLinRot">(1.0 1.0)</param>
         <param name="integrationBasedIKCorrectionGainsLinRot">(2.0 10.0)</param>
         <param name="integrationBasedIKIntegralCorrectionGainsLinRot">(0.0 0.0)</param>

@@ -193,6 +193,16 @@ public:
     double integrationBasedIKIntegralAngularCorrectionGain;
     double integrationBasedJointVelocityLimit;
 
+    std::vector<std::string> custom_jointsVelocityLimitsNames;
+    iDynTree::VectorDynSize custom_jointsVelocityLimitsValues;
+    // Custom Constraint Form: lowerBound<=A*X<=upperBuond
+    iDynTree::MatrixDynSize
+        customConstraintMatrix; // A, CxN matrix; C: number of Constraints, N: number of
+                                // system states: Dofs+6 in floating-based robot
+    std::vector<std::string> customConstraintVariables; // X, Nx1  Vector
+    iDynTree::VectorDynSize customConstraintUpperBound; // upperBuond, Cx1 Vector
+    iDynTree::VectorDynSize customConstraintLowerBound; // lowerBound, Cx1 Vector
+
     SolverIK ikSolver;
 
     bool useDirectBaseMeasurement;
@@ -653,6 +663,129 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     pImpl->jointVelocitiesSolution.zero();
 
     pImpl->baseTransformSolution.setRotation(iDynTree::Rotation::Identity());
+
+    // ================================================
+    // INITIALIZE CUSTOM CONSTRAINTS FOR INTEGRATION-IK
+    // ================================================
+
+    if (!(config.check("customConstraints") && config.find("customConstraints").isString())) {
+        yInfo() << LogPrefix << "custom Constraints option not found or not valid";
+    }
+    else {
+        const std::string customConstraintsFileName = config.find("customConstraints").asString();
+        auto& rf_customConstraint = yarp::os::ResourceFinder::getResourceFinderSingleton();
+        std::string customConstraint_filePath =
+            rf_customConstraint.findFile(customConstraintsFileName);
+        if (customConstraint_filePath.empty()) {
+            yError() << LogPrefix << "Failed to find file"
+                     << config.find("customConstraints").asString();
+            return false;
+        }
+        yarp::os::Value *custom_joints_velocity_limits_names, *custom_joints_velocity_limits_values,
+            *custom_constraint_variables, *custom_constraint_matrix, *custom_constraint_upper_bound,
+            *custom_constraint_lower_bound;
+
+        // custom joint velocity limit names
+        if (!rf_customConstraint.check("custom_joints_velocity_limits_names",
+                                       custom_joints_velocity_limits_names)) {
+            yWarning() << LogPrefix << "custom_joints_velocity_limits_names is not found";
+        }
+        else {
+            if (!custom_joints_velocity_limits_names->isList()) {
+                yWarning() << LogPrefix << "custom_joints_velocity_limits_names is not a list";
+                return false;
+            }
+            yarp::os::Bottle* bottle = custom_joints_velocity_limits_names->asList();
+
+            for (size_t i = 0; i < bottle->size(); i++) {
+                pImpl->custom_jointsVelocityLimitsNames.push_back(bottle->get(i).toString());
+            }
+        }
+
+        // custom joint velocity limit values
+        if (!rf_customConstraint.check("custom_joints_velocity_limits_values",
+                                       custom_joints_velocity_limits_values)) {
+            yWarning() << LogPrefix << "custom_joints_velocity_limits_values is not found";
+        }
+        else {
+            if (!custom_joints_velocity_limits_values->isList()) {
+                yWarning() << LogPrefix << "custom_joints_velocity_limits_values is not a list";
+                return false;
+            }
+            yarp::os::Bottle* bottle = custom_joints_velocity_limits_values->asList();
+            pImpl->custom_jointsVelocityLimitsValues.resize(bottle->size());
+            for (size_t i = 0; i < bottle->size(); i++) {
+                pImpl->custom_jointsVelocityLimitsValues.setVal(i, bottle->get(i).asDouble());
+            }
+        }
+        // custom constraint variables
+        if (!rf_customConstraint.check("custom_constraint_variables",
+                                       custom_constraint_variables)) {
+            yWarning() << LogPrefix << "custom_constraint_variables is not found";
+        }
+        else {
+            if (!custom_constraint_variables->isList()) {
+                yWarning() << LogPrefix << "custom_constraint_variables is not a list";
+                return false;
+            }
+            yarp::os::Bottle* bottle = custom_constraint_variables->asList();
+            for (size_t i = 0; i < bottle->size(); i++) {
+                pImpl->customConstraintVariables.push_back(bottle->get(i).toString());
+            }
+        }
+
+        // custom constraint upper bound
+        if (!rf_customConstraint.check("custom_constraint_upper_bound",
+                                       custom_constraint_upper_bound)) {
+            yWarning() << LogPrefix << "custom_constraint_upper_bound is not found";
+        }
+        else {
+            if (!custom_constraint_upper_bound->isList()) {
+                yWarning() << LogPrefix << "custom_constraint_upper_bound is not a list";
+                return false;
+            }
+            yarp::os::Bottle* bottle = custom_constraint_upper_bound->asList();
+            pImpl->customConstraintUpperBound.resize(bottle->size());
+            for (size_t i = 0; i < bottle->size(); i++) {
+                pImpl->customConstraintUpperBound.setVal(i, bottle->get(i).asDouble());
+            }
+        }
+
+        // custom constraint lower bound
+        if (!rf_customConstraint.check("custom_constraint_lower_bound",
+                                       custom_constraint_lower_bound)) {
+            yWarning() << LogPrefix << "custom_constraint_lower_bound is not found";
+        }
+        else {
+            if (!custom_constraint_lower_bound->isList()) {
+                yWarning() << LogPrefix << "custom_constraint_lower_bound is not a list";
+                return false;
+            }
+            yarp::os::Bottle* bottle = custom_constraint_lower_bound->asList();
+            pImpl->customConstraintLowerBound.resize(bottle->size());
+            for (size_t i = 0; i < bottle->size(); i++) {
+                pImpl->customConstraintLowerBound.setVal(i, bottle->get(i).asDouble());
+            }
+        }
+
+        // custom constraint matrix
+        //        if (!rf_customConstraint.check("custom_constraint_matrix",
+        //        custom_constraint_matrix)) {
+        //            yWarning() << LogPrefix << "custom_constraint_matrix is not found";
+        //        }
+        //        else {
+        //            if (!custom_constraint_matrix->isList()) {
+        //                yWarning() << LogPrefix << "custom_constraint_lower_bound is not a list";
+        //                return false;
+        //            }
+        //            yarp::os::Bottle* bottle = custom_constraint_lower_bound->asList();
+        //            pImpl->customConstraintLowerBound.resize(bottle->size());
+        //            for (size_t i = 0; i < bottle->size(); i++) {
+        //                pImpl->customConstraintLowerBound.setVal(i, bottle->get(i).asDouble());
+        //            }
+        //        }
+        // check if all sizes are write wrt each other
+    }
 
     // ====================================
     // INITIALIZE INVERSE KINEMATICS SOLVER
