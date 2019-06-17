@@ -1272,6 +1272,19 @@ bool InverseVelocityKinematics::getBaseVelocitySolution(iDynTree::Vector3& linea
     return true;
 }
 
+bool InverseVelocityKinematics::setBaseVelocityLimit(iDynTree::Vector6 lowerBound,
+                                                     iDynTree::Vector6 upperBound)
+{
+    // to implement!
+    return true;
+}
+bool InverseVelocityKinematics::setJointsVelocityLimit(std::vector<std::string> jointsNameList,
+                                                       iDynTree::VectorDynSize jointsLimitList)
+{
+    // to implement!
+    return true;
+}
+
 bool InverseVelocityKinematics::solve()
 {
     return pImpl->solveProblem();
