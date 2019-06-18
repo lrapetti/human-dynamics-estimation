@@ -194,16 +194,19 @@ public:
     double integrationBasedJointVelocityLimit;
 
     std::vector<std::string> custom_jointsVelocityLimitsNames;
+    std::vector<iDynTree::JointIndex> custom_jointsVelocityLimitsIndexes;
     iDynTree::VectorDynSize custom_jointsVelocityLimitsValues;
     // Custom Constraint Form: lowerBound<=A*X<=upperBuond
     iDynTree::MatrixDynSize
         customConstraintMatrix; // A, CxN matrix; C: number of Constraints, N: number of
                                 // system states: Dofs+6 in floating-based robot
     std::vector<std::string> customConstraintVariables; // X, Nx1  Vector : variables names
+    std::vector<iDynTree::JointIndex>
+        customConstraintVariablesIndex; // X, Nx1  Vector : variables index
     iDynTree::VectorDynSize customConstraintUpperBound; // upperBuond, Cx1 Vector
     iDynTree::VectorDynSize customConstraintLowerBound; // lowerBound, Cx1 Vector
-    iDynTree::Vector6 baseVelocityUpperLimit;
-    iDynTree::Vector6 baseVelocityLowerLimit;
+    iDynTree::VectorDynSize baseVelocityUpperLimit;
+    iDynTree::VectorDynSize baseVelocityLowerLimit;
 
     SolverIK ikSolver;
 
@@ -678,7 +681,7 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
         yInfo() << LogPrefix
                 << "CUSTOM_CONSTRAINTS option found or valid, size: " << constraintGroup.size();
         for (size_t i = 1; i < constraintGroup.size(); i++) {
-            yInfo() << "group " << i << constraintGroup.get(i).asString();
+            yInfo() << "group " << i;
             if (!(constraintGroup.get(i).isList()
                   && constraintGroup.get(i).asList()->size() == 2)) {
                 yError() << LogPrefix
@@ -702,29 +705,29 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
                 for (size_t i = 0; i < pImpl->custom_jointsVelocityLimitsNames.size(); i++) {
                     yInfo() << pImpl->custom_jointsVelocityLimitsNames[i];
                 }
-            }
+            } // another option
             else if (constraintKey == "custom_joints_velocity_limits_values") {
                 pImpl->custom_jointsVelocityLimitsValues.resize(constraintListContent->size());
                 for (size_t i = 0; i < constraintListContent->size(); i++) {
                     pImpl->custom_jointsVelocityLimitsValues.setVal(
                         i, constraintListContent->get(i).asDouble());
                 }
-                yInfo() << "custom_joints_velocity_limits_names: ";
+                yInfo() << "custom_joints_velocity_limits_values: ";
                 for (size_t i = 0; i < pImpl->custom_jointsVelocityLimitsValues.size(); i++) {
                     yInfo() << pImpl->custom_jointsVelocityLimitsValues.getVal(i);
                 }
-            }
+            } // another option
             else if (constraintKey == "custom_constraint_variables") {
 
                 for (size_t i = 0; i < constraintListContent->size(); i++) {
                     pImpl->customConstraintVariables.push_back(
                         constraintListContent->get(i).asString());
                 }
-                yInfo() << "custom_joints_velocity_limits_names: ";
+                yInfo() << "custom_constraint_variables: ";
                 for (size_t i = 0; i < pImpl->customConstraintVariables.size(); i++) {
-                    yInfo() << pImpl->custom_jointsVelocityLimitsNames[i];
+                    yInfo() << pImpl->customConstraintVariables[i];
                 }
-            }
+            } // another option
             else if (constraintKey == "custom_constraint_matrix") {
                 // pImpl->customConstraintMatrix.resize(constraintListContent->size());
                 for (size_t i = 0; i < constraintListContent->size(); i++) {
@@ -744,7 +747,7 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
                     }
                     std::cout << std::endl;
                 }
-            }
+            } // another option
             else if (constraintKey == "custom_constraint_upper_bound") {
 
                 pImpl->customConstraintUpperBound.resize(constraintListContent->size());
@@ -752,27 +755,28 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
                     pImpl->customConstraintUpperBound.setVal(
                         i, constraintListContent->get(i).asDouble());
                 }
-                yInfo() << "custom_joints_velocity_limits_names: ";
+                yInfo() << "custom_constraint_upper_bound: ";
                 for (size_t i = 0; i < pImpl->customConstraintUpperBound.size(); i++) {
                     yInfo() << pImpl->customConstraintUpperBound.getVal(i);
                 }
-            }
+            } // another option
             else if (constraintKey == "custom_constraint_lower_bound") {
                 pImpl->customConstraintLowerBound.resize(constraintListContent->size());
                 for (size_t i = 0; i < constraintListContent->size(); i++) {
                     pImpl->customConstraintLowerBound.setVal(
                         i, constraintListContent->get(i).asDouble());
                 }
-                yInfo() << "custom_joints_velocity_limits_names: ";
+                yInfo() << "custom_constraint_lower_bound: ";
                 for (size_t i = 0; i < pImpl->customConstraintLowerBound.size(); i++) {
                     yInfo() << pImpl->customConstraintLowerBound.getVal(i);
                 }
-            }
+            } // another option
             else if (constraintKey == "base_velocity_limit_upper_buond") {
-                if (constraintListContent->size() == 6) {
+                if (constraintListContent->size() != 6) {
                     yError() << "the base velocity limit should have size of 6.";
                     return false;
                 }
+                pImpl->baseVelocityUpperLimit.resize(6);
                 for (size_t i = 0; i < constraintListContent->size(); i++) {
                     pImpl->baseVelocityUpperLimit.setVal(i,
                                                          constraintListContent->get(i).asDouble());
@@ -781,12 +785,13 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
                 for (size_t i = 0; i < pImpl->baseVelocityUpperLimit.size(); i++) {
                     yInfo() << pImpl->baseVelocityUpperLimit.getVal(i);
                 }
-            }
+            } // another option
             else if (constraintKey == "base_velocity_limit_lower_buond") {
-                if (constraintListContent->size() == 6) {
+                if (constraintListContent->size() != 6) {
                     yError() << "the base velocity limit should have size of 6.";
                     return false;
                 }
+                pImpl->baseVelocityLowerLimit.resize(6);
                 for (size_t i = 0; i < constraintListContent->size(); i++) {
                     pImpl->baseVelocityLowerLimit.setVal(i,
                                                          constraintListContent->get(i).asDouble());
@@ -795,12 +800,14 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
                 for (size_t i = 0; i < pImpl->baseVelocityLowerLimit.size(); i++) {
                     yInfo() << pImpl->baseVelocityLowerLimit.getVal(i);
                 }
-            }
+            } // another option
             else {
                 yError() << LogPrefix << "the parameter key is not defined: " << constraintKey;
                 return false;
             }
         }
+
+        // check sizes
         if (pImpl->custom_jointsVelocityLimitsNames.size()
             != pImpl->custom_jointsVelocityLimitsValues.size()) {
             yError() << "the joint velocity limits name and value size are not equal";
@@ -822,12 +829,43 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
                      << ") are not equal";
             return false;
         }
+        yInfo() << "******* DOF: " << modelLoader.model().getNrOfDOFs();
+        for (size_t i = 0; i < pImpl->custom_jointsVelocityLimitsNames.size(); i++) {
+            pImpl->custom_jointsVelocityLimitsIndexes.push_back(
+                modelLoader.model().getJointIndex(pImpl->custom_jointsVelocityLimitsNames[i]));
+            yInfo() << pImpl->custom_jointsVelocityLimitsNames[i] << " : "
+                    << pImpl->custom_jointsVelocityLimitsIndexes[i];
+        }
+        for (size_t i = 0; i < pImpl->customConstraintVariables.size(); i++) {
+            pImpl->customConstraintVariablesIndex.push_back(
+                modelLoader.model().getJointIndex(pImpl->customConstraintVariables[i]));
+            yInfo() << pImpl->custom_jointsVelocityLimitsNames[i] << " : "
+                    << pImpl->customConstraintVariablesIndex[i];
+        }
 
-        return false;
+        //******************************************
+        //****** SET CONSTRAINTS FOR IB-IK *********
+        //******************************************
+        if (pImpl->custom_jointsVelocityLimitsNames.size() != 0) {
+            pImpl->inverseVelocityKinematics.setCustomJointsVelocityLimit(
+                pImpl->custom_jointsVelocityLimitsIndexes,
+                pImpl->custom_jointsVelocityLimitsValues);
+        }
+        if (pImpl->baseVelocityUpperLimit.size() != 0) {
+            pImpl->inverseVelocityKinematics.setCustomBaseVelocityLimit(
+                pImpl->baseVelocityUpperLimit, pImpl->baseVelocityLowerLimit);
+        }
+        if (pImpl->customConstraintVariablesIndex.size() != 0) {
+            pImpl->inverseVelocityKinematics.setCustomConstraintsJointsValues(
+                pImpl->customConstraintVariablesIndex,
+                pImpl->customConstraintUpperBound,
+                pImpl->customConstraintLowerBound,
+                pImpl->customConstraintMatrix);
+        }
 
-        // modify: constraint matrix should have the robot state size
+        pImpl->inverseVelocityKinematics.setGeneralJointVelocityConstraints(
+            pImpl->integrationBasedJointVelocityLimit);
     }
-    // tmp stop the process here!
 
     // ====================================
     // INITIALIZE INVERSE KINEMATICS SOLVER
@@ -1411,14 +1449,30 @@ bool HumanStateProvider::impl::initializeIntegrationBasedInverseKinematicsSolver
         return false;
     }
     // add constraints here.
-    if (!inverseVelocityKinematics.setBaseVelocityLimit(baseVelocityLowerLimit,
-                                                        baseVelocityUpperLimit)) {
+    if (!inverseVelocityKinematics.setCustomBaseVelocityLimit(baseVelocityLowerLimit,
+                                                              baseVelocityUpperLimit)) {
         yError() << LogPrefix
-                 << "Failed to set the inverse velocity kinematics base vecloity limits";
+                 << "Failed to set the inverse velocity kinematics base custom vecloity limits";
         return false;
     }
     // add joint velcoity limit
     // add joint values limit
+    if (!inverseVelocityKinematics.setCustomJointsVelocityLimit(
+            custom_jointsVelocityLimitsIndexes, custom_jointsVelocityLimitsValues)) {
+        yError() << LogPrefix
+                 << "Failed to set the inverse velocity kinematics custom joint velocity limits";
+        return false;
+    }
+
+    if (!inverseVelocityKinematics.setCustomConstraintsJointsValues(customConstraintVariablesIndex,
+                                                                    customConstraintUpperBound,
+                                                                    customConstraintLowerBound,
+                                                                    customConstraintMatrix)) {
+        yError()
+            << LogPrefix
+            << "Failed to set the inverse velocity kinematics custom joint inequality constraints";
+        return false;
+    }
 
     return true;
 }

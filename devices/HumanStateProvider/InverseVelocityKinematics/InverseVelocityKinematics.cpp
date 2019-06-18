@@ -8,11 +8,6 @@
 
 #include "InverseVelocityKinematics.hpp"
 
-#include <Eigen/QR>
-#include <Eigen/SparseCholesky>
-#include <iDynTree/Core/EigenHelpers.h>
-#include <iDynTree/Core/VectorDynSize.h>
-#include <iDynTree/KinDynComputations.h>
 // osqp-eigen
 #include "OsqpEigen/OsqpEigen.h"
 
@@ -36,6 +31,23 @@ public:
     iDynTree::KinDynComputations dynamics;
     size_t dofs;
     size_t configSpaceSize;
+
+    //*********** custom cosntraints *************//
+    // custom joint velocities limit
+    std::vector<iDynTree::JointIndex> m_customJointsVelocityLimitsIndexes;
+    iDynTree::VectorDynSize m_custom_jointsVelocityLimitsUpperBound;
+    iDynTree::VectorDynSize m_custom_jointsVelocityLimitsLowerBound;
+    // custom base velocities limit
+    iDynTree::VectorDynSize m_custom_baseVelocityUpperLimit;
+    iDynTree::VectorDynSize m_custom_baseVelocityLowerLimit;
+    // custom ineqality constraint for joint values
+    iDynTree::MatrixDynSize
+        m_custom_ConstraintMatrix; // A, CxN matrix; C: number of Constraints, N: number of
+    std::vector<iDynTree::JointIndex>
+        m_custom_ConstraintVariablesIndex; // X, Nx1  Vector : variables index
+    iDynTree::VectorDynSize m_custom_ConstraintUpperBound; // upperBuond, Cx1 Vector
+    iDynTree::VectorDynSize m_custom_ConstraintLowerBound; // lowerBound, Cx1 Vector
+    double m_generalJointVelocityLimit;
 
     struct
     {
@@ -705,135 +717,203 @@ void InverseVelocityKinematics::impl::prepareWeightVector()
 }
 void InverseVelocityKinematics::impl::prepareOptimizer()
 {
-    //    if (resolutionMode == QP) {
-    configSpaceSize = dofs + 6;
-    numberOfConstraints = dofs;
+    if (resolutionMode == QP) {
+        configSpaceSize = dofs + 6;
+        //********************************************//
+        //****** SET THE CONSTRAINTS ****************//
+        //*******************************************//
+        // set custom joint velocity
+        if (m_generalJointVelocityLimit > 0.0) {
+            numberOfConstraints = dofs;
+            // general constraints: joint velocity constraints
+            iDynTree::toEigen(m_u) =
+                Eigen::VectorXd::Ones(numberOfConstraints, 1) * m_generalJointVelocityLimit;
+            iDynTree::toEigen(m_l) =
+                Eigen::VectorXd::Ones(numberOfConstraints, 1) * -1.0 * m_generalJointVelocityLimit;
 
-    // generate P_prime matrix
-    m_P = iDynTree::MatrixDynSize(numberOfTargetVariables, numberOfTargetVariables);
-    iDynTree::toEigen(m_P).setIdentity();
+            m_A = iDynTree::MatrixDynSize(numberOfConstraints, configSpaceSize);
+            iDynTree::toEigen(m_A).bottomRows(dofs).setIdentity();
+        }
+        // check for custom joint velocity constraint
+        if (m_generalJointVelocityLimit > 0.0) {
+            if (m_customJointsVelocityLimitsIndexes.size() > 0) {
+                for (size_t i = 0; i < m_customJointsVelocityLimitsIndexes.size(); i++) {
+                    m_u.setVal(m_customJointsVelocityLimitsIndexes[i],
+                               m_custom_jointsVelocityLimitsUpperBound.getVal(i));
+                    m_l.setVal(m_customJointsVelocityLimitsIndexes[i],
+                               m_custom_jointsVelocityLimitsLowerBound.getVal(i));
+                }
+            }
+        }
+        else {
+            if (m_customJointsVelocityLimitsIndexes.size() > 0) {
+                numberOfConstraints = m_customJointsVelocityLimitsIndexes.size();
+                m_A = iDynTree::MatrixDynSize(numberOfConstraints, configSpaceSize);
+                m_u.resize(numberOfConstraints);
+                m_l.resize(numberOfConstraints);
 
-    m_P_prime = iDynTree::MatrixDynSize(numberOfTargetVariables + configSpaceSize,
-                                        numberOfTargetVariables + configSpaceSize);
-    iDynTree::toEigen(m_P_prime).topLeftCorner(configSpaceSize, configSpaceSize) =
-        iDynTree::toEigen(regularizationMatrixBuffer);
-    iDynTree::toEigen(m_P_prime).topRightCorner(configSpaceSize, numberOfTargetVariables) =
-        Eigen::MatrixXd::Zero(configSpaceSize, numberOfTargetVariables);
-    iDynTree::toEigen(m_P_prime).bottomLeftCorner(numberOfTargetVariables, configSpaceSize) =
-        Eigen::MatrixXd::Zero(numberOfTargetVariables, configSpaceSize);
-    iDynTree::toEigen(m_P_prime).bottomRightCorner(
-        numberOfTargetVariables, numberOfTargetVariables) = iDynTree::toEigen(m_P);
+                for (size_t i = 0; i < m_customJointsVelocityLimitsIndexes.size(); i++) {
+                    m_u.setVal(i, m_custom_jointsVelocityLimitsUpperBound.getVal(i));
+                    m_l.setVal(i, m_custom_jointsVelocityLimitsLowerBound.getVal(i));
 
-    // generate A_prime matrix for constraints
-    m_A = iDynTree::MatrixDynSize(numberOfConstraints, configSpaceSize);
-    // to implement, get constraint matrix from the user!
-    if (numberOfConstraints == dofs) {
-        iDynTree::toEigen(m_A).bottomRows(dofs).setIdentity();
+                    m_A.setVal(i, m_customJointsVelocityLimitsIndexes[i], 1.0);
+                }
+            }
+        }
+        // set custom base velocity limit
+        if (m_custom_baseVelocityUpperLimit.size() == 6) {
+            numberOfConstraints += 6;
+            iDynTree::VectorDynSize tmp_m_l, tmp_m_u;
+            tmp_m_l = m_l;
+            tmp_m_u = m_u;
+            m_l.resize(numberOfConstraints);
+            m_u.resize(numberOfConstraints);
+            m_l.zero();
+            m_u.zero();
+
+            iDynTree::toEigen(m_u).topRows(6) = iDynTree::toEigen(m_custom_baseVelocityUpperLimit);
+            iDynTree::toEigen(m_l).topRows(6) = iDynTree::toEigen(m_custom_baseVelocityLowerLimit);
+
+            iDynTree::toEigen(m_u).bottomRows(numberOfConstraints - 6) = iDynTree::toEigen(tmp_m_u);
+            iDynTree::toEigen(m_l).bottomRows(numberOfConstraints - 6) = iDynTree::toEigen(tmp_m_l);
+
+            iDynTree::MatrixDynSize tmp_m_A = m_A;
+            m_A.resize(numberOfConstraints, configSpaceSize);
+            m_A.zero();
+            iDynTree::toEigen(m_A).topLeftCorner(6, 6).Identity();
+            iDynTree::toEigen(m_A).bottomRows(numberOfConstraints - 6) = iDynTree::toEigen(tmp_m_A);
+        }
+        // set custom inequality constraint for joint values
+
+        //*******************************************//
+        //*******************************************//
+
+        // generate P_prime matrix
+        m_P = iDynTree::MatrixDynSize(numberOfTargetVariables, numberOfTargetVariables);
+        iDynTree::toEigen(m_P).setIdentity();
+
+        m_P_prime = iDynTree::MatrixDynSize(numberOfTargetVariables + configSpaceSize,
+                                            numberOfTargetVariables + configSpaceSize);
+        iDynTree::toEigen(m_P_prime).topLeftCorner(configSpaceSize, configSpaceSize) =
+            iDynTree::toEigen(regularizationMatrixBuffer);
+        iDynTree::toEigen(m_P_prime).topRightCorner(configSpaceSize, numberOfTargetVariables) =
+            Eigen::MatrixXd::Zero(configSpaceSize, numberOfTargetVariables);
+        iDynTree::toEigen(m_P_prime).bottomLeftCorner(numberOfTargetVariables, configSpaceSize) =
+            Eigen::MatrixXd::Zero(numberOfTargetVariables, configSpaceSize);
+        iDynTree::toEigen(m_P_prime).bottomRightCorner(
+            numberOfTargetVariables, numberOfTargetVariables) = iDynTree::toEigen(m_P);
+
+        // generate A_prime matrix for constraints
+        //        m_A = iDynTree::MatrixDynSize(numberOfConstraints, configSpaceSize);
+        //        // to implement, get constraint matrix from the user!
+        //        if (numberOfConstraints == dofs) {
+        //            iDynTree::toEigen(m_A).bottomRows(dofs).setIdentity();
+        //        }
+        //        else {
+        //            yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
+        //                     << " to implement: user defined constraint matrix";
+        //        }
+        m_A_prime = iDynTree::MatrixDynSize(numberOfConstraints + numberOfTargetVariables,
+                                            configSpaceSize + numberOfTargetVariables);
+
+        iDynTree::toEigen(m_A_prime).topLeftCorner(numberOfTargetVariables, configSpaceSize) =
+            Eigen::MatrixXd::Zero(numberOfTargetVariables, configSpaceSize);
+        iDynTree::toEigen(m_A_prime)
+            .topRightCorner(numberOfTargetVariables, numberOfTargetVariables)
+            .setIdentity();
+        iDynTree::toEigen(m_A_prime).bottomLeftCorner(numberOfConstraints, configSpaceSize) =
+            iDynTree::toEigen(m_A);
+        iDynTree::toEigen(m_A_prime).bottomRightCorner(numberOfConstraints,
+                                                       numberOfTargetVariables) =
+            Eigen::MatrixXd::Zero(numberOfConstraints, numberOfTargetVariables);
+        // generate upper limit vector (u_prime) and lower limit vector (l_prime)
+        m_l = iDynTree::VectorDynSize(numberOfConstraints);
+        m_u = iDynTree::VectorDynSize(numberOfConstraints);
+
+        // to implement, get velocity vector limit from the configuration files
+        //        double jointVelocityLimit = 10.0;
+
+        //        iDynTree::toEigen(m_u) = Eigen::VectorXd::Ones(numberOfConstraints, 1) *
+        //        jointVelocityLimit; iDynTree::toEigen(m_l) =
+        //            Eigen::VectorXd::Ones(numberOfConstraints, 1) * -1.0 * jointVelocityLimit;
+        m_l_prime = iDynTree::VectorDynSize(numberOfConstraints + numberOfTargetVariables);
+        m_u_prime = iDynTree::VectorDynSize(numberOfConstraints + numberOfTargetVariables);
+        iDynTree::toEigen(m_u_prime).topRows(numberOfTargetVariables) =
+            Eigen::VectorXd::Zero(numberOfTargetVariables, 1);
+        iDynTree::toEigen(m_u_prime).bottomRows(numberOfConstraints) = iDynTree::toEigen(m_u);
+
+        iDynTree::toEigen(m_l_prime).topRows(numberOfTargetVariables) =
+            Eigen::VectorXd::Zero(numberOfTargetVariables, 1);
+        iDynTree::toEigen(m_l_prime).bottomRows(numberOfConstraints) = iDynTree::toEigen(m_l);
+        m_optimizerSolver = std::make_unique<OsqpEigen::Solver>();
+
+        // solver.settings()->setVerbosity(false);
+        m_optimizerSolver->settings()->setWarmStart(true);
+        m_optimizerSolver->settings()->setVerbosity(false);
+
+        m_optimizerSolver->data()->setNumberOfVariables(numberOfTargetVariables + configSpaceSize);
+        m_optimizerSolver->data()->setNumberOfConstraints(numberOfConstraints
+                                                          + numberOfTargetVariables);
+
+        //        Eigen::SparseMatrix<double> A_prime_sparse = A_prime.sparseView();
+        //        Eigen::SparseMatrix<double> P_prime_sparse = P_prime.sparseView();
+        //    Eigen::VectorXd q_prime(numberOfTargetVariables + configSpaceSize);
+        m_q_prime = iDynTree::VectorDynSize(numberOfTargetVariables + configSpaceSize);
+        iDynTree::toEigen(m_q_prime).setZero();
+
+        // set A
+        Eigen::SparseMatrix<double> constraintMatrix = iDynTree::toEigen(m_A_prime).sparseView();
+        if (!m_optimizerSolver->data()->setLinearConstraintsMatrix(constraintMatrix)) {
+            yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
+                     << "qp solver for [setLinearConstraintsMatrix] returns false.";
+            return;
+        }
+
+        // set U
+        auto upperBuond = iDynTree::toEigen(m_u_prime);
+        if (!m_optimizerSolver->data()->setUpperBound(upperBuond)) {
+            yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
+                     << "qp solver for [setUpperBound] returns false.";
+
+            return;
+        }
+
+        // set L
+        auto lowerBuond = iDynTree::toEigen(m_l_prime);
+        if (!m_optimizerSolver->data()->setLowerBound(lowerBuond)) {
+            yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
+                     << "qp solver for [setLowerBound] returns false.";
+
+            return;
+        }
+
+        // set P
+        Eigen::SparseMatrix<double> HessianMatrix = iDynTree::toEigen(m_P_prime).sparseView();
+        if (!m_optimizerSolver->data()->setHessianMatrix(HessianMatrix)) {
+            yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
+                     << "qp solver for [setHessianMatrix] returns false.";
+
+            return;
+        }
+
+        // set q
+        auto GradientVector = iDynTree::toEigen(m_q_prime);
+        if (!m_optimizerSolver->data()->setGradient(GradientVector)) {
+            yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
+                     << "qp solver for [setGradient] returns false.";
+            return;
+        }
+
+        if (!m_optimizerSolver->initSolver()) {
+            yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
+                     << "qp solver for [initSolver] returns false.";
+
+            return;
+        }
+
+        // controller QPSolution vector
+        //   Eigen::VectorXd QPSolution;
     }
-    else {
-        yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
-                 << " to implement: user defined constraint matrix";
-    }
-    m_A_prime = iDynTree::MatrixDynSize(numberOfConstraints + numberOfTargetVariables,
-                                        configSpaceSize + numberOfTargetVariables);
-
-    iDynTree::toEigen(m_A_prime).topLeftCorner(numberOfTargetVariables, configSpaceSize) =
-        Eigen::MatrixXd::Zero(numberOfTargetVariables, configSpaceSize);
-    iDynTree::toEigen(m_A_prime)
-        .topRightCorner(numberOfTargetVariables, numberOfTargetVariables)
-        .setIdentity();
-    iDynTree::toEigen(m_A_prime).bottomLeftCorner(numberOfConstraints, configSpaceSize) =
-        iDynTree::toEigen(m_A);
-    iDynTree::toEigen(m_A_prime).bottomRightCorner(numberOfConstraints, numberOfTargetVariables) =
-        Eigen::MatrixXd::Zero(numberOfConstraints, numberOfTargetVariables);
-    // generate upper limit vector (u_prime) and lower limit vector (l_prime)
-    m_l = iDynTree::VectorDynSize(numberOfConstraints);
-    m_u = iDynTree::VectorDynSize(numberOfConstraints);
-
-    // to implement, get velocity vector limit from the configuration files
-    double jointVelocityLimit = 10.0;
-
-    iDynTree::toEigen(m_u) = Eigen::VectorXd::Ones(numberOfConstraints, 1) * jointVelocityLimit;
-    iDynTree::toEigen(m_l) =
-        Eigen::VectorXd::Ones(numberOfConstraints, 1) * -1.0 * jointVelocityLimit;
-    m_l_prime = iDynTree::VectorDynSize(numberOfConstraints + numberOfTargetVariables);
-    m_u_prime = iDynTree::VectorDynSize(numberOfConstraints + numberOfTargetVariables);
-    iDynTree::toEigen(m_u_prime).topRows(numberOfTargetVariables) =
-        Eigen::VectorXd::Zero(numberOfTargetVariables, 1);
-    iDynTree::toEigen(m_u_prime).bottomRows(numberOfConstraints) = iDynTree::toEigen(m_u);
-
-    iDynTree::toEigen(m_l_prime).topRows(numberOfTargetVariables) =
-        Eigen::VectorXd::Zero(numberOfTargetVariables, 1);
-    iDynTree::toEigen(m_l_prime).bottomRows(numberOfConstraints) = iDynTree::toEigen(m_l);
-    m_optimizerSolver = std::make_unique<OsqpEigen::Solver>();
-
-    // solver.settings()->setVerbosity(false);
-    m_optimizerSolver->settings()->setWarmStart(true);
-    m_optimizerSolver->settings()->setVerbosity(false);
-
-    m_optimizerSolver->data()->setNumberOfVariables(numberOfTargetVariables + configSpaceSize);
-    m_optimizerSolver->data()->setNumberOfConstraints(numberOfConstraints
-                                                      + numberOfTargetVariables);
-
-    //        Eigen::SparseMatrix<double> A_prime_sparse = A_prime.sparseView();
-    //        Eigen::SparseMatrix<double> P_prime_sparse = P_prime.sparseView();
-    //    Eigen::VectorXd q_prime(numberOfTargetVariables + configSpaceSize);
-    m_q_prime = iDynTree::VectorDynSize(numberOfTargetVariables + configSpaceSize);
-    iDynTree::toEigen(m_q_prime).setZero();
-
-    // set A
-    Eigen::SparseMatrix<double> constraintMatrix = iDynTree::toEigen(m_A_prime).sparseView();
-    if (!m_optimizerSolver->data()->setLinearConstraintsMatrix(constraintMatrix)) {
-        yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
-                 << "qp solver for [setLinearConstraintsMatrix] returns false.";
-        return;
-    }
-
-    // set U
-    auto upperBuond = iDynTree::toEigen(m_u_prime);
-    if (!m_optimizerSolver->data()->setUpperBound(upperBuond)) {
-        yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
-                 << "qp solver for [setUpperBound] returns false.";
-
-        return;
-    }
-
-    // set L
-    auto lowerBuond = iDynTree::toEigen(m_l_prime);
-    if (!m_optimizerSolver->data()->setLowerBound(lowerBuond)) {
-        yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
-                 << "qp solver for [setLowerBound] returns false.";
-
-        return;
-    }
-
-    // set P
-    Eigen::SparseMatrix<double> HessianMatrix = iDynTree::toEigen(m_P_prime).sparseView();
-    if (!m_optimizerSolver->data()->setHessianMatrix(HessianMatrix)) {
-        yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
-                 << "qp solver for [setHessianMatrix] returns false.";
-
-        return;
-    }
-
-    // set q
-    auto GradientVector = iDynTree::toEigen(m_q_prime);
-    if (!m_optimizerSolver->data()->setGradient(GradientVector)) {
-        yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
-                 << "qp solver for [setGradient] returns false.";
-        return;
-    }
-
-    if (!m_optimizerSolver->initSolver()) {
-        yError() << "[InverseVelocityKinematics::impl::prepareOptimizer] "
-                 << "qp solver for [initSolver] returns false.";
-
-        return;
-    }
-
-    // controller QPSolution vector
-    //   Eigen::VectorXd QPSolution;
-    //    }
 }
 
 // ===================
@@ -1272,16 +1352,42 @@ bool InverseVelocityKinematics::getBaseVelocitySolution(iDynTree::Vector3& linea
     return true;
 }
 
-bool InverseVelocityKinematics::setBaseVelocityLimit(iDynTree::Vector6 lowerBound,
-                                                     iDynTree::Vector6 upperBound)
+bool InverseVelocityKinematics::setCustomBaseVelocityLimit(iDynTree::VectorDynSize lowerBound,
+                                                           iDynTree::VectorDynSize upperBound)
 {
-    // to implement!
+    pImpl->m_custom_baseVelocityLowerLimit = lowerBound;
+    pImpl->m_custom_baseVelocityUpperLimit = upperBound;
     return true;
 }
-bool InverseVelocityKinematics::setJointsVelocityLimit(std::vector<std::string> jointsNameList,
-                                                       iDynTree::VectorDynSize jointsLimitList)
+bool InverseVelocityKinematics::setCustomJointsVelocityLimit(
+    std::vector<iDynTree::JointIndex> jointsIndexList,
+    iDynTree::VectorDynSize jointsLimitList)
 {
-    // to implement!
+    pImpl->m_customJointsVelocityLimitsIndexes = jointsIndexList;
+    pImpl->m_custom_jointsVelocityLimitsUpperBound = jointsLimitList;
+    pImpl->m_custom_jointsVelocityLimitsLowerBound.resize(jointsLimitList.size());
+    for (unsigned i = 0; i < jointsLimitList.size(); i++) {
+        pImpl->m_custom_jointsVelocityLimitsLowerBound.setVal(i, -1.0 * jointsLimitList.getVal(i));
+    }
+    return true;
+}
+
+bool InverseVelocityKinematics::setCustomConstraintsJointsValues(
+    std::vector<iDynTree::JointIndex> jointsIndexList,
+    iDynTree::VectorDynSize upperBoundary,
+    iDynTree::VectorDynSize lowerBoundary,
+    iDynTree::MatrixDynSize customConstraintMatrix)
+{
+    pImpl->m_custom_ConstraintVariablesIndex = jointsIndexList;
+    pImpl->m_custom_ConstraintMatrix = customConstraintMatrix;
+    pImpl->m_custom_ConstraintUpperBound = upperBoundary;
+    pImpl->m_custom_ConstraintUpperBound = lowerBoundary;
+    return true;
+}
+
+bool InverseVelocityKinematics::setGeneralJointVelocityConstraints(double jointVelocityLimit)
+{
+    pImpl->m_generalJointVelocityLimit = jointVelocityLimit;
     return true;
 }
 
