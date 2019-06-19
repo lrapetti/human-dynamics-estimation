@@ -9,6 +9,7 @@
 #ifndef INVERSEVELOCITYKINEMATICS_HPP
 #define INVERSEVELOCITYKINEMATICS_HPP
 
+#include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/SparseCholesky>
 #include <iDynTree/Core/EigenHelpers.h>
