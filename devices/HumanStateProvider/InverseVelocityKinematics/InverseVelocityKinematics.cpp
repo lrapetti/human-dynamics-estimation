@@ -959,14 +959,13 @@ void InverseVelocityKinematics::impl::prepareOptimizer()
         //                  << iDynTree::toEigen(m_custom_baseVelocityLowerLimit).transpose() <<
         //                  std::endl;
 
-        //        std::cout << "m_u:\n" << iDynTree::toEigen(m_u).transpose() << std::endl;
-        //        std::cout << "m_l:\n" << iDynTree::toEigen(m_l).transpose() << std::endl;
+        std::cout << "m_u:\n" << iDynTree::toEigen(m_u).transpose() << std::endl;
+        std::cout << "m_l:\n" << iDynTree::toEigen(m_l).transpose() << std::endl;
 
-        //        std::cout << "m_u_prime: \n" << iDynTree::toEigen(m_u_prime).transpose() <<
-        //        std::endl; std::cout << "m_l_prime: \n" <<
-        //        iDynTree::toEigen(m_l_prime).transpose() << std::endl;
+        // std::cout << "m_u_prime: \n" << iDynTree::toEigen(m_u_prime).transpose() << std::endl;
+        // std::cout << "m_l_prime: \n" << iDynTree::toEigen(m_l_prime).transpose() << std::endl;
 
-        //        std::cout << "A:\n" << iDynTree::toEigen(m_A) << std::endl;
+        std::cout << "A:\n" << iDynTree::toEigen(m_A) << std::endl;
         //        std::cout << "A':\n " << iDynTree::toEigen(m_A_prime) << std::endl;
         //        std::cout << "P':\n " << iDynTree::toEigen(m_P_prime) << std::endl;
 
