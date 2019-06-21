@@ -69,6 +69,7 @@
             <param name="map_LeftFoot">(l_foot_fake, XsensSuit::vLink::LeftFoot)</param>
         </group>
         <group name="CUSTOM_CONSTRAINTS">
+        <!-- check issue 132 for more info-->
         <!-- note that a group can not be empty, otherwise it returns error-->
         <!-- custom joint limits velocities-->
             <!--param name="custom_joints_velocity_limits_names">(neck_roll, neck_pitch)</param-->
@@ -108,6 +109,8 @@
             1000.0,  1.9622,  3.7228,  1000.0,  1.7453,  5.2796,  1000.0)</param>
             <!--param name="custom_constraint_upper_bound"> (46.0, 305.7)</param>
             <param name="custom_constraint_lower_bound"> (-404.0, -54.3)</param-->
+            <param name="k_u">4.0</param>
+            <param name="k_l">1.0</param>
         </group>
 
         <action phase="startup" level="5" type="attach">
