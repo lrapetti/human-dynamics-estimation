@@ -107,8 +107,8 @@
             <param name="custom_constraint_upper_bound"> (
             1000.0,  1.9622,  3.7228,  1000.0,  1.7453,  5.2796,  1000.0,
             1000.0,  1.9622,  3.7228,  1000.0,  1.7453,  5.2796,  1000.0)</param>
-            <param name="k_u">4.0</param>
-            <param name="k_l">1.0</param>
+            <param name="k_u">0.5</param>
+            <param name="k_l">0.5</param>
         </group>
 
         <action phase="startup" level="5" type="attach">
