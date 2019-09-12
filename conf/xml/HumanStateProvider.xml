@@ -25,6 +25,7 @@
         <param name="useXsensJointsAngles">false</param>
         <param name="allowIKFailures">true</param>
         <param name="useDirectBaseMeasurement">false</param>
+        <param name="enableLogger">true</param>
         <!-- optimization parameters -->
         <param name="maxIterationsIK">300</param>
         <param name="ikLinearSolver">ma27</param>

@@ -16,6 +16,8 @@
 #include "IHumanState.h"
 
 #include <memory>
+#include <matlogger2/matlogger2.h>
+#include <matlogger2/utils/mat_appender.h>
 
 namespace hde {
     namespace devices {
@@ -66,5 +68,16 @@ public:
     std::array<double, 3> getCoMPosition() const override;
     std::array<double, 3> getCoMVelocity() const override;
 };
+
+inline std::string getTimeDateMatExtension()
+{
+    // this code snippet is taken from
+    // https://stackoverflow.com/questions/17223096/outputting-date-and-time-in-c-using-stdchrono
+    auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::string timedate;
+    std::strftime(&timedate[0], timedate.size(), "%Y-%m-%d%H:%M:%Slog.mat", std::localtime(&now));
+    return timedate;
+}
+
 
 #endif // HDE_DEVICES_HUMANSTATEPROVIDER
