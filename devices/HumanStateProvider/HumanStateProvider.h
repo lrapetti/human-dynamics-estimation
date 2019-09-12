@@ -18,6 +18,9 @@
 #include <memory>
 #include <matlogger2/matlogger2.h>
 #include <matlogger2/utils/mat_appender.h>
+#include <time.h>
+#include <chrono>
+#include <ctime>
 
 namespace hde {
     namespace devices {

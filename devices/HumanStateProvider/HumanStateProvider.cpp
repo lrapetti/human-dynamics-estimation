@@ -22,7 +22,6 @@
 
 #include <array>
 #include <atomic>
-#include <chrono>
 #include <mutex>
 #include <stack>
 #include <string>
@@ -682,6 +681,9 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     pImpl->solution.jointPositions.resize(nrOfDOFs);
     pImpl->solution.jointVelocities.resize(nrOfDOFs);
 
+    pImpl->solution.linkErrorOrientations.resize(linksGroup.size());
+    pImpl->solution.linkErrorAngularVelocities.resize(linksGroup.size());
+
     pImpl->jointConfigurationSolution.resize(nrOfDOFs);
     pImpl->jointConfigurationSolution.zero();
 
@@ -947,6 +949,10 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
 
 bool HumanStateProvider::close()
 {
+    while(isRunning()) {
+        stop();
+    }
+
     return true;
 }
 
@@ -1010,8 +1016,8 @@ void HumanStateProvider::run()
     }
 
     auto tock = std::chrono::high_resolution_clock::now();
-    yDebug() << LogPrefix << "IK took"
-             << std::chrono::duration_cast<std::chrono::milliseconds>(tock - tick).count() << "ms";
+    // yDebug() << LogPrefix << "IK took"
+    //         << std::chrono::duration_cast<std::chrono::milliseconds>(tock - tick).count() << "ms";
 
     // If useDirectBaseMeasurement is true, set the measured base pose and velocity as solution
     if (pImpl->useDirectBaseMeasurement) {
@@ -1088,18 +1094,19 @@ void HumanStateProvider::run()
 
     if(pImpl->enableLogger)
     {
-        pImpl->logger->add(LoggerPrefix + "_time", yarp::os::Time::now());
-        pImpl->logger->add(LoggerPrefix + "_jointPositions", pImpl->solution.jointPositions);
-        pImpl->logger->add(LoggerPrefix + "_jointVelocities", pImpl->solution.jointVelocities);
-        pImpl->logger->add(LoggerPrefix + "_basePosition", std::vector<double>(pImpl->solution.basePosition.begin(), pImpl->solution.basePosition.end()));
-        pImpl->logger->add(LoggerPrefix + "_baseOrientation", std::vector<double>(pImpl->solution.baseOrientation.begin(), pImpl->solution.baseOrientation.end()));
-        pImpl->logger->add(LoggerPrefix + "_baseVelocity", std::vector<double>(pImpl->solution.baseVelocity.begin(), pImpl->solution.baseVelocity.end()));
-        pImpl->logger->add(LoggerPrefix + "_CoMPosition", std::vector<double>(pImpl->solution.CoMPosition.begin(), pImpl->solution.CoMPosition.end()));
-        pImpl->logger->add(LoggerPrefix + "_CoMVelocity", std::vector<double>(pImpl->solution.CoMVelocity.begin(), pImpl->solution.CoMVelocity.end()));
-        pImpl->logger->add(LoggerPrefix + "_linksOrientationError", pImpl->solution.linkErrorOrientations);
-        pImpl->logger->add(LoggerPrefix + "_linksAngularVelocityError", pImpl->solution.linkErrorAngularVelocities);
+        pImpl->logger->add(LoggerPrefix + "_time", 1.0);
+        //pImpl->logger->add(LoggerPrefix + "_time", yarp::os::Time::now());
+        // pImpl->logger->add(LoggerPrefix + "_jointPositions", pImpl->solution.jointPositions);
+        // pImpl->logger->add(LoggerPrefix + "_jointVelocities", pImpl->solution.jointVelocities);
+        // pImpl->logger->add(LoggerPrefix + "_basePosition", std::vector<double>(pImpl->solution.basePosition.begin(), pImpl->solution.basePosition.end()));
+        // pImpl->logger->add(LoggerPrefix + "_baseOrientation", std::vector<double>(pImpl->solution.baseOrientation.begin(), pImpl->solution.baseOrientation.end()));
+        // pImpl->logger->add(LoggerPrefix + "_baseVelocity", std::vector<double>(pImpl->solution.baseVelocity.begin(), pImpl->solution.baseVelocity.end()));
+        // pImpl->logger->add(LoggerPrefix + "_CoMPosition", std::vector<double>(pImpl->solution.CoMPosition.begin(), pImpl->solution.CoMPosition.end()));
+        // pImpl->logger->add(LoggerPrefix + "_CoMVelocity", std::vector<double>(pImpl->solution.CoMVelocity.begin(), pImpl->solution.CoMVelocity.end()));
+        // pImpl->logger->add(LoggerPrefix + "_linksOrientationError", pImpl->solution.linkErrorOrientations);
+        // pImpl->logger->add(LoggerPrefix + "_linksAngularVelocityError", pImpl->solution.linkErrorAngularVelocities);
 
-        pImpl->logger->flush_available_data();
+        // pImpl->logger->flush_available_data();
     }
 }
 
@@ -2024,15 +2031,15 @@ bool HumanStateProvider::impl::openLogger()
     appender->start_flush_thread();
 
     logger->create(LoggerPrefix + "_time", 1);
-    logger->create(LoggerPrefix + "_jointPositions", humanModel.getNrOfDOFs());
-    logger->create(LoggerPrefix + "_jointVelocities", humanModel.getNrOfDOFs());
-    logger->create(LoggerPrefix + "_basePosition", 3);
-    logger->create(LoggerPrefix + "_baseOrientation", 4);
-    logger->create(LoggerPrefix + "_baseVelocity", 6);
-    logger->create(LoggerPrefix + "_CoMPosition", 3);
-    logger->create(LoggerPrefix + "_CoMVelocity", 3);
-    logger->create(LoggerPrefix + "_linksOrientationError", 3 * linkTransformMatrices.size());
-    logger->create(LoggerPrefix + "_linksAngularVelocityError", 3 * linkVelocities.size());
+    // logger->create(LoggerPrefix + "_jointPositions", humanModel.getNrOfDOFs());
+    // logger->create(LoggerPrefix + "_jointVelocities", humanModel.getNrOfDOFs());
+    // logger->create(LoggerPrefix + "_basePosition", 3);
+    // logger->create(LoggerPrefix + "_baseOrientation", 4);
+    // logger->create(LoggerPrefix + "_baseVelocity", 6);
+    // logger->create(LoggerPrefix + "_CoMPosition", 3);
+    // logger->create(LoggerPrefix + "_CoMVelocity", 3);
+    // logger->create(LoggerPrefix + "_linksOrientationError", linkTransformMatrices.size());
+    // logger->create(LoggerPrefix + "_linksAngularVelocityError", linkVelocities.size());
 
     yInfo() << LogPrefix << "Logging is active.";
     return true;
