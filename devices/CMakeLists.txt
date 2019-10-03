@@ -2,6 +2,11 @@
 # This software may be modified and distributed under the terms of the
 # GNU Lesser General Public License v2.1 or any later version.
 
+if(ENABLE_LOGGER)
+    add_definitions(-DENABLE_LOGGER)
+  find_package(matlogger2 REQUIRED)
+endif(ENABLE_LOGGER)
+
 add_subdirectory(HumanStateProvider)
 add_subdirectory(HumanWrenchProvider)
 add_subdirectory(HumanDynamicsEstimator)

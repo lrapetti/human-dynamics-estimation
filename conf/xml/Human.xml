@@ -26,6 +26,7 @@
         <param name="useXsensJointsAngles">false</param>
         <param name="allowIKFailures">true</param>
         <param name="useDirectBaseMeasurement">false</param>
+        <param name="enableLogger">true</param>
         <!-- optimization parameters -->
         <param name="maxIterationsIK">300</param>
         <param name="ikLinearSolver">ma27</param>
@@ -264,6 +265,7 @@
         <param name="baseLink">Pelvis</param>
         <param name="number_of_wrench_sensors">2</param>
         <param name="wrench_sensors_link_name">(LeftFoot RightFoot)</param>
+        <param name="enableLogger">true</param>
         <group name="PRIORS">
             <param name="mu_dyn_variables">0.0001</param>
             <param name="cov_dyn_variables">10000.0</param>
@@ -286,7 +288,7 @@
                 <elem name="HumanDynamicsEstimatorLabel2">HumanWrenchProvider</elem>
             </paramlist>
         </action>
-        <action phase="shutdown" level="5" type="detach"/>
+        <action phase="shutdown" level="4" type="detach"/>
     </device>
 
     <!--device type="human_dynamics_wrapper" name="HumanDynamicsWrapper">

@@ -52,6 +52,7 @@ static bool getReducedModel(const iDynTree::Model& modelInput,
                             iDynTree::Model& modelOutput);
 
 const std::string DeviceName = "HumanStateProvider";
+const std::string LoggerPrefix = DeviceName;
 const std::string LogPrefix = DeviceName + " :";
 constexpr double DefaultPeriod = 0.01;
 
@@ -95,6 +96,9 @@ struct SolutionIK
 
     std::array<double, 3> CoMPosition;
     std::array<double, 3> CoMVelocity;
+
+    std::vector<double> linkErrorOrientations;
+    std::vector<double> linkErrorAngularVelocities;
 
     void clear()
     {
@@ -207,6 +211,14 @@ public:
     // kinDynComputation
     std::unique_ptr<iDynTree::KinDynComputations> kinDynComputations;
     iDynTree::Vector3 worldGravity;
+
+    // logger
+    bool enableLogger;
+#ifdef ENABLE_LOGGER
+    XBot::MatLogger2::Ptr logger;
+    XBot::MatAppender::Ptr appender;
+#endif
+    bool openLogger();
 
     // get input data
     bool getJointAnglesFromInputData(iDynTree::VectorDynSize& jointAngles);
@@ -321,6 +333,14 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     else {
         yError() << LogPrefix << "ikSolver " << solverName << " not found";
         return false;
+    }
+
+    if (config.check("enableLogger") && config.find("enableLogger").isBool() && config.find("enableLogger").asBool()) {
+        pImpl->enableLogger = true;
+        yInfo() << LogPrefix << "Logger is enabled";
+    }
+    else {
+        pImpl->enableLogger = false;
     }
 	
     yarp::os::Bottle* floatingBaseFrameList = config.find("floatingBaseFrame").asList();
@@ -652,6 +672,9 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     pImpl->jointVelocitiesSolution.resize(nrOfDOFs);
     pImpl->jointVelocitiesSolution.zero();
 
+    pImpl->solution.linkErrorOrientations.resize(linksGroup.size());
+    pImpl->solution.linkErrorAngularVelocities.resize(linksGroup.size());
+
     pImpl->baseTransformSolution.setRotation(iDynTree::Rotation::Identity());
 
     // ====================================
@@ -673,6 +696,20 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     else if (pImpl->ikSolver == SolverIK::integrationbased) {
         if (!pImpl->initializeIntegrationBasedInverseKinematicsSolver()) {
             askToStop();
+            return false;
+        }
+    }
+
+    // =================
+    // INITIALIZE LOGGER
+    // =================
+
+    // open the logger
+    if (pImpl->enableLogger)
+    {
+        if (!pImpl->openLogger())
+        {
+            yError() << LogPrefix << "Unable to open the logger";
             return false;
         }
     }
@@ -765,6 +802,20 @@ void HumanStateProvider::run()
                     kindyncomputations->getCenterOfMassVelocity().getVal(1),
                     kindyncomputations->getCenterOfMassVelocity().getVal(2)};
 
+    // If the logger is enabled, the errors are also computed
+    if(pImpl->enableLogger) {
+         pImpl->computeLinksOrientationErrors(pImpl->linkTransformMatrices,
+                                              pImpl->jointConfigurationSolution,
+                                              pImpl->baseTransformSolution,
+                                              pImpl->linkErrorOrientations);
+         pImpl->computeLinksAngularVelocityErrors(pImpl->linkVelocities,
+                                                  pImpl->jointConfigurationSolution,
+                                                  pImpl->baseTransformSolution,
+                                                  pImpl->jointVelocitiesSolution,
+                                                  pImpl->baseVelocitySolution,
+                                                  pImpl->linkErrorAngularVelocities);
+    }
+
     // Expose IK solution for IHumanState
     {
         std::lock_guard<std::mutex> lock(pImpl->mutex);
@@ -794,20 +845,36 @@ void HumanStateProvider::run()
         // CoM position and velocity
         pImpl->solution.CoMPosition = {CoM_position[0], CoM_position[1], CoM_position[2]};
         pImpl->solution.CoMVelocity = {CoM_velocity[0], CoM_velocity[1], CoM_velocity[2]};
+
+        if(pImpl->enableLogger)
+        {
+            unsigned i = 0;
+            for (const auto& linkMapEntry : pImpl->linkErrorOrientations) {
+                const ModelLinkName& linkName = linkMapEntry.first;
+                pImpl->solution.linkErrorOrientations[i] = pImpl->linkErrorOrientations[linkName].asTrace() / 2;
+                pImpl->solution.linkErrorAngularVelocities[i] = std::sqrt((std::pow(pImpl->linkErrorAngularVelocities[linkName].getVal(0), 2)
+                                                                           + std::pow(pImpl->linkErrorAngularVelocities[linkName].getVal(1), 2)
+                                                                           + std::pow(pImpl->linkErrorAngularVelocities[linkName].getVal(2), 2)) / 3);
+                i = i + 1;
+            }
+        }
     }
 
-    // compute the inverse kinematic errors (currently the result is unused, but it may be used for
-    // evaluating the IK performance)
-    // pImpl->computeLinksOrientationErrors(pImpl->linkTransformMatrices,
-    //                                      pImpl->jointConfigurationSolution,
-    //                                      pImpl->baseTransformSolution,
-    //                                      pImpl->linkErrorOrientations);
-    // pImpl->computeLinksAngularVelocityErrors(pImpl->linkVelocities,
-    //                                          pImpl->jointConfigurationSolution,
-    //                                          pImpl->baseTransformSolution,
-    //                                          pImpl->jointVelocitiesSolution,
-    //                                          pImpl->baseVelocitySolution,
-    //                                          pImpl->linkErrorAngularVelocities);
+#ifdef ENABLE_LOGGER
+    if(pImpl->enableLogger)
+    {
+        pImpl->logger->add(LoggerPrefix + "_time", yarp::os::Time::now());
+        pImpl->logger->add(LoggerPrefix + "_jointPositions", getJointPositions());
+        pImpl->logger->add(LoggerPrefix + "_jointVelocities", getJointVelocities());
+        pImpl->logger->add(LoggerPrefix + "_basePosition", std::vector<double>(pImpl->solution.basePosition.begin(), pImpl->solution.basePosition.end()));
+        pImpl->logger->add(LoggerPrefix + "_baseOrientation", std::vector<double>(pImpl->solution.baseOrientation.begin(), pImpl->solution.baseOrientation.end()));
+        pImpl->logger->add(LoggerPrefix + "_baseVelocity", std::vector<double>(pImpl->solution.baseVelocity.begin(), pImpl->solution.baseVelocity.end()));
+        pImpl->logger->add(LoggerPrefix + "_CoMPosition", std::vector<double>(pImpl->solution.CoMPosition.begin(), pImpl->solution.CoMPosition.end()));
+        pImpl->logger->add(LoggerPrefix + "_CoMVelocity", std::vector<double>(pImpl->solution.CoMVelocity.begin(), pImpl->solution.CoMVelocity.end()));
+        pImpl->logger->add(LoggerPrefix + "_linksOrientationError", pImpl->solution.linkErrorOrientations);
+        pImpl->logger->add(LoggerPrefix + "_linksAngularVelocityError", pImpl->solution.linkErrorAngularVelocities);
+    }
+#endif
 }
 
 bool HumanStateProvider::impl::getLinkTransformFromInputData(
@@ -1692,6 +1759,36 @@ bool HumanStateProvider::impl::computeLinksAngularVelocityErrors(
     return true;
 }
 
+bool HumanStateProvider::impl::openLogger()
+{
+#ifdef ENABLE_LOGGER
+    std::string currentTime = getTimeDateMatExtension();
+    std::string fileName = LoggerPrefix + currentTime;
+
+    logger = XBot::MatLogger2::MakeLogger(fileName);
+    appender = XBot::MatAppender::MakeInstance();
+    appender->add_logger(logger);
+    appender->start_flush_thread();
+
+    logger->create(LoggerPrefix + "_time", 1);
+    logger->create(LoggerPrefix + "_jointPositions", humanModel.getNrOfDOFs());
+    logger->create(LoggerPrefix + "_jointVelocities", humanModel.getNrOfDOFs());
+    logger->create(LoggerPrefix + "_basePosition", 3);
+    logger->create(LoggerPrefix + "_baseOrientation", 4);
+    logger->create(LoggerPrefix + "_baseVelocity", 6);
+    logger->create(LoggerPrefix + "_CoMPosition", 3);
+    logger->create(LoggerPrefix + "_CoMVelocity", 3);
+    logger->create(LoggerPrefix + "_linksOrientationError", 3 * linkTransformMatrices.size());
+    logger->create(LoggerPrefix + "_linksAngularVelocityError", 3 * linkVelocities.size());
+
+    yInfo() << LogPrefix << "Logging is active.";
+    return true;
+#else
+    yWarning() << LogPrefix << "ENABLE_LOGGER option is not active in CMakeLists, enable it or disable enableLogger in the configuration";
+    return false;
+#endif
+}
+
 bool HumanStateProvider::attach(yarp::dev::PolyDriver* poly)
 {
     if (!poly) {
@@ -1822,8 +1919,14 @@ void HumanStateProvider::threadRelease()
 
 bool HumanStateProvider::detach()
 {
+#ifdef ENABLE_LOGGER
+    // reset is used to avoid segmentation error that prevent saving the data
+    if (pImpl->enableLogger) {
+        pImpl->logger.reset();
+    }
+#endif
     while (isRunning()) {
-        stop();
+        askToStop();
     }
 
     {

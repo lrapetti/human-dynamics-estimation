@@ -24,16 +24,30 @@ target_include_directories(HumanStateProvider PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     SYSTEM PRIVATE ${EIGEN3_INCLUDE_DIR})
 
-target_link_libraries(HumanStateProvider PUBLIC
-    IHumanState
-    YARP::YARP_OS
-    YARP::YARP_dev
-    YARP::YARP_init
-    IWear::IWear
-    iDynTree::idyntree-model
-    iDynTree::idyntree-inverse-kinematics
-    iDynTree::idyntree-high-level
-    UtilityLibrary)
+if(ENABLE_LOGGER)
+    target_link_libraries(HumanStateProvider PUBLIC
+        IHumanState
+        YARP::YARP_OS
+        YARP::YARP_dev
+        YARP::YARP_init
+        IWear::IWear
+        iDynTree::idyntree-model
+        iDynTree::idyntree-inverse-kinematics
+        iDynTree::idyntree-high-level
+        UtilityLibrary
+        matlogger2::matlogger2)
+else(ENABLE_LOGGER)
+    target_link_libraries(HumanStateProvider PUBLIC
+        IHumanState
+        YARP::YARP_OS
+        YARP::YARP_dev
+        YARP::YARP_init
+        IWear::IWear
+        iDynTree::idyntree-model
+        iDynTree::idyntree-inverse-kinematics
+        iDynTree::idyntree-high-level
+        UtilityLibrary)
+endif()
 
 yarp_install(
     TARGETS HumanStateProvider

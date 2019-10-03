@@ -40,6 +40,7 @@
 #include <vector>
 
 const std::string DeviceName = "HumanDynamicsEstimator";
+const std::string LoggerPrefix = DeviceName;
 const std::string LogPrefix = DeviceName + " :";
 constexpr double DefaultPeriod = 0.01;
 
@@ -791,6 +792,14 @@ public:
 
     // Wrench sensor link names variable
     std::vector<std::string> wrenchSensorsLinkNames;
+
+    // logger
+    bool enableLogger;
+#ifdef ENABLE_LOGGER
+    XBot::MatLogger2::Ptr logger;
+    XBot::MatAppender::Ptr appender;
+#endif
+    bool openLogger();
 };
 
 HumanDynamicsEstimator::HumanDynamicsEstimator()
@@ -841,6 +850,14 @@ bool HumanDynamicsEstimator::open(yarp::os::Searchable& config)
     std::string baseLink = config.find("baseLink").asString();
     int number_of_wrench_sensors = config.find("number_of_wrench_sensors").asInt();
     yarp::os::Bottle* linkNames = config.find("wrench_sensors_link_name").asList();
+
+    if (config.check("enableLogger") && config.find("enableLogger").isBool() && config.find("enableLogger").asBool()) {
+        pImpl->enableLogger = true;
+        yInfo() << LogPrefix << "Logger is enabled";
+    }
+    else {
+        pImpl->enableLogger = false;
+    }
 
     if (number_of_wrench_sensors != linkNames->size()) {
         yError() << LogPrefix << "mismatch between the number of wrench sensors and corresponding sensor link names list";
@@ -1047,6 +1064,20 @@ bool HumanDynamicsEstimator::open(yarp::os::Searchable& config)
                                                                     pImpl->berdyData.state.jointsPosition,
                                                                     pImpl->berdyData.estimates.jointTorqueEstimates);
 
+    // =================
+    // INITIALIZE LOGGER
+    // =================
+
+    // open the logger
+    if (pImpl->enableLogger)
+    {
+        if (!pImpl->openLogger())
+        {
+            yError() << LogPrefix << "Unable to open the logger";
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -1171,9 +1202,9 @@ void HumanDynamicsEstimator::run()
     iDynTree::VectorDynSize estimatedDynamicVariables(pImpl->berdyData.helper.getNrOfDynamicVariables());
     pImpl->berdyData.solver->getLastEstimate(estimatedDynamicVariables);
 
-    // ===========================
-    // EXPOSE DATA FOR IHUMANSTATE
-    // ===========================
+    // ==============================
+    // EXPOSE DATA FOR IHUMANDYNAMICS
+    // ==============================
 
     {
         std::lock_guard<std::mutex> lock(pImpl->mutex);
@@ -1184,6 +1215,35 @@ void HumanDynamicsEstimator::run()
                                                                         pImpl->berdyData.estimates.jointTorqueEstimates);
     }
 
+#ifdef ENABLE_LOGGER
+    if(pImpl->enableLogger)
+    {
+        pImpl->logger->add(LoggerPrefix + "_time", yarp::os::Time::now());
+        pImpl->logger->add(LoggerPrefix + "_jointTorque", getJointTorques());
+    }
+#endif
+}
+
+bool HumanDynamicsEstimator::Impl::openLogger()
+{
+#ifdef ENABLE_LOGGER
+    std::string currentTime = getTimeDateMatExtension();
+    std::string fileName = LoggerPrefix + currentTime;
+
+    logger = XBot::MatLogger2::MakeLogger(fileName);
+    appender = XBot::MatAppender::MakeInstance();
+    appender->add_logger(logger);
+    appender->start_flush_thread();
+
+    logger->create(LoggerPrefix + "_time", 1);
+    logger->create(LoggerPrefix + "_jointTorque", humanModel.getNrOfDOFs());
+
+    yInfo() << LogPrefix << "Logging is active.";
+    return true;
+#else
+    yWarning() << LogPrefix << "ENABLE_LOGGER option is not active in CMakeLists, enable it or disable enableLogger in the configuration";
+    return false;
+#endif
 }
 
 bool HumanDynamicsEstimator::attach(yarp::dev::PolyDriver* poly)
@@ -1252,14 +1312,20 @@ void HumanDynamicsEstimator::threadRelease()
 
 bool HumanDynamicsEstimator::detach()
 {
+#ifdef ENABLE_LOGGER
+    // reset is used to avoid segmentation error that prevent saving the data
+    if (pImpl->enableLogger) {
+        pImpl->logger.reset();
+    }
+#endif
     while(isRunning()) {
-        stop();
+        askToStop();
     }
 
     pImpl->iHumanState = nullptr;
     pImpl->iHumanWrench = nullptr;
     pImpl->iAnalogSensor = nullptr;
-    stop();
+
     return true;
 }
 

@@ -45,6 +45,9 @@ else()
     option(BUILD_SHARED_LIBS "Build libraries as shared as opposed to static" ON)
 endif()
 
+# Option to use the logger
+option(ENABLE_LOGGER "Enable logger using matlogger2" OFF)
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Plugins are force to be Shared/Dynamic Library 

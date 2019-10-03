@@ -20,17 +20,32 @@ target_include_directories(HumanDynamicsEstimator PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     SYSTEM PRIVATE ${EIGEN3_INCLUDE_DIR})
 
-target_link_libraries(HumanDynamicsEstimator PUBLIC
-    IHumanState
-    IHumanWrench
-    IHumanDynamics
-    YARP::YARP_OS
-    YARP::YARP_dev
-    YARP::YARP_sig
-    YARP::YARP_init
-    iDynTree::idyntree-core
-    iDynTree::idyntree-model
-    iDynTree::idyntree-estimation)
+if(ENABLE_LOGGER)
+    target_link_libraries(HumanDynamicsEstimator PUBLIC
+        IHumanState
+        IHumanWrench
+        IHumanDynamics
+        YARP::YARP_OS
+        YARP::YARP_dev
+        YARP::YARP_sig
+        YARP::YARP_init
+        iDynTree::idyntree-core
+        iDynTree::idyntree-model
+        iDynTree::idyntree-estimation
+        matlogger2::matlogger2)
+else(ENABLE_LOGGER)
+    target_link_libraries(HumanDynamicsEstimator PUBLIC
+        IHumanState
+        IHumanWrench
+        IHumanDynamics
+        YARP::YARP_OS
+        YARP::YARP_dev
+        YARP::YARP_sig
+        YARP::YARP_init
+        iDynTree::idyntree-core
+        iDynTree::idyntree-model
+        iDynTree::idyntree-estimation)
+endif()
 
 yarp_install(
     TARGETS HumanDynamicsEstimator
