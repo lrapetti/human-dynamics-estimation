@@ -211,7 +211,15 @@ struct BerdyData
     struct DynamicEstimates
     {
         iDynTree::JointDOFsDoubleArray jointTorqueEstimates;
-    } estimates;    
+    } estimates;
+
+    struct BerdyMatrices
+    {
+        iDynTree::MatrixDynSize D;
+        iDynTree::VectorDynSize bD;
+        iDynTree::MatrixDynSize Y;
+        iDynTree::VectorDynSize bY;
+    } matrices;
 };
 
 // Creates an iDynTree sparse matrix (set of triplets) from a vector
@@ -972,6 +980,21 @@ bool HumanDynamicsEstimator::open(yarp::os::Searchable& config)
     pImpl->berdyData.estimates.jointTorqueEstimates = iDynTree::JointDOFsDoubleArray(pImpl->berdyData.helper.model());
     pImpl->berdyData.estimates.jointTorqueEstimates.zero();
 
+    // If the logger is used, the berdy matrices has to be initialized
+    if (pImpl->enableLogger) {
+        pImpl->berdyData.matrices.D.resize(pImpl->berdyData.helper.getNrOfDynamicEquations(), pImpl->berdyData.helper.getNrOfDynamicVariables());
+        pImpl->berdyData.matrices.D.zero();
+        pImpl->berdyData.matrices.bD.resize(pImpl->berdyData.helper.getNrOfDynamicEquations());
+        pImpl->berdyData.matrices.bD.zero();
+        pImpl->berdyData.matrices.Y.resize(pImpl->berdyData.helper.getNrOfSensorsMeasurements(), pImpl->berdyData.helper.getNrOfDynamicVariables());
+        pImpl->berdyData.matrices.Y.zero();
+        pImpl->berdyData.matrices.bY.resize(pImpl->berdyData.helper.getNrOfSensorsMeasurements());
+        pImpl->berdyData.matrices.bY.zero();
+
+        pImpl->berdyData.helper.getBerdyMatrices(pImpl->berdyData.matrices.D, pImpl->berdyData.matrices.bD,
+                                                 pImpl->berdyData.matrices.Y, pImpl->berdyData.matrices.bY);
+    }
+
     // Get the berdy sensors following its internal order
     std::vector<iDynTree::BerdySensor> berdySensors = pImpl->berdyData.helper.getSensorsOrdering();
 
@@ -1213,6 +1236,11 @@ void HumanDynamicsEstimator::run()
         pImpl->berdyData.helper.extractJointTorquesFromDynamicVariables(estimatedDynamicVariables,
                                                                         pImpl->berdyData.state.jointsPosition,
                                                                         pImpl->berdyData.estimates.jointTorqueEstimates);
+
+        if (pImpl->enableLogger) {
+            pImpl->berdyData.helper.getBerdyMatrices(pImpl->berdyData.matrices.D, pImpl->berdyData.matrices.bD,
+                                                     pImpl->berdyData.matrices.Y, pImpl->berdyData.matrices.bY);
+        }
     }
 
 #ifdef ENABLE_LOGGER
@@ -1220,6 +1248,10 @@ void HumanDynamicsEstimator::run()
     {
         pImpl->logger->add(LoggerPrefix + "_time", yarp::os::Time::now());
         pImpl->logger->add(LoggerPrefix + "_jointTorque", getJointTorques());
+        pImpl->logger->add(LoggerPrefix + "_D", iDynTree::toEigen(pImpl->berdyData.matrices.D));
+        pImpl->logger->add(LoggerPrefix + "_bD", iDynTree::toEigen(pImpl->berdyData.matrices.bD));
+        pImpl->logger->add(LoggerPrefix + "_Y", iDynTree::toEigen(pImpl->berdyData.matrices.Y));
+        pImpl->logger->add(LoggerPrefix + "_bY", iDynTree::toEigen(pImpl->berdyData.matrices.bY));
     }
 #endif
 }
@@ -1237,6 +1269,10 @@ bool HumanDynamicsEstimator::Impl::openLogger()
 
     logger->create(LoggerPrefix + "_time", 1);
     logger->create(LoggerPrefix + "_jointTorque", humanModel.getNrOfDOFs());
+    logger->create(LoggerPrefix + "_D", berdyData.helper.getNrOfDynamicEquations(), berdyData.helper.getNrOfDynamicVariables());
+    logger->create(LoggerPrefix + "_bD", berdyData.helper.getNrOfDynamicEquations());
+    logger->create(LoggerPrefix + "_Y", berdyData.helper.getNrOfSensorsMeasurements(), berdyData.helper.getNrOfDynamicVariables());
+    logger->create(LoggerPrefix + "_bY", berdyData.helper.getNrOfSensorsMeasurements());
 
     yInfo() << LogPrefix << "Logging is active.";
     return true;
