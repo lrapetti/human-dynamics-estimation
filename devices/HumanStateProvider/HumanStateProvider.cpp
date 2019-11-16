@@ -146,12 +146,15 @@ public:
         if (command.read(connection)) {
 
             if (command.get(0).asString() == "help") {
+                response.addString("Enter <calibrate> to apply a secondary calibration for all the links");
                 response.addString("Enter <calibrate <linkName>> to apply a secondary calibration for the given link");
                 response.addString("Enter <reset <linkName>> to remove secondary calibration for the given link");
                 response.addString("Enter <reset> to remove all the secondary calibrations");
             }
             else if (command.get(0).asString() == "calibrate" && command.get(1).isNull()) {
                 response.addString("Entered command <calibrate> is missing the linkName. Enter help to know available commands");
+                this->cmdStatus = true;
+                this->linkName = "";
             }
             else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull()) {
                 this->linkName = command.get(1).asString();
@@ -1130,6 +1133,29 @@ void HumanStateProvider::run()
         if (pImpl->commandPro.cmdErease && linkName == "")
         {
             pImpl->secondaryCalibrationRotations.clear();
+        }
+        else if (!pImpl->commandPro.cmdErease && linkName == "")
+        {
+            iDynTree::VectorDynSize jointPos;
+            jointPos.resize(kindyncomputations->getNrOfDegreesOfFreedom());
+            jointPos.zero();
+            kindyncomputations->setJointPos(jointPos);
+
+            for (auto modelLink = pImpl->wearableStorage.modelToWearable_LinkName.begin(); modelLink != pImpl->wearableStorage.modelToWearable_LinkName.end(); modelLink++)
+            {
+                linkName = modelLink->first;
+                iDynTree::Rotation linkRotationZero = kindyncomputations->getWorldTransform(kindyncomputations->model().getLinkIndex(linkName)).getRotation();
+                iDynTree::Rotation secondaryCalibrationRotation = pImpl->linkTransformMatrices.at(linkName).getRotation().inverse() * linkRotationZero;
+                yInfo() << "secondary calibration rotation for " << linkName;
+                yInfo() << secondaryCalibrationRotation.toString();
+                if (!(pImpl->secondaryCalibrationRotations.find(linkName) == pImpl->secondaryCalibrationRotations.end()))
+                {
+                    yWarning() << LogPrefix << "discarting previous secondary calibration for " << linkName;
+                    pImpl->secondaryCalibrationRotations.erase(linkName);
+                }
+                pImpl->secondaryCalibrationRotations.emplace(linkName,secondaryCalibrationRotation);
+            }
+
         }
         else if (pImpl->wearableStorage.modelToWearable_LinkName.find(linkName) == pImpl->wearableStorage.modelToWearable_LinkName.end()) {
             yWarning() << LogPrefix << "link " << linkName << " choosen for secondaty calibration is not valid";
