@@ -138,38 +138,47 @@ class CmdParser : public yarp::os::PortReader
 public:
     std::atomic<bool> cmdStatus{false};
     std::atomic<bool> cmdErease{false};
-    std::string linkName;
+    std::string parentLinkName;
+    std::string childLinkName;
 
     bool read(yarp::os::ConnectionReader& connection) override
     {
+        this->parentLinkName = "";
+        this->childLinkName = "";
+
         yarp::os::Bottle command, response;
         if (command.read(connection)) {
 
             if (command.get(0).asString() == "help") {
                 response.addString("Enter <calibrate> to apply a secondary calibration for all the links");
                 response.addString("Enter <calibrate <linkName>> to apply a secondary calibration for the given link");
+                response.addString("Enter <calibrate <parentLinkName> <childLinkName>> to apply a secondary calibration for the given chain");
                 response.addString("Enter <reset <linkName>> to remove secondary calibration for the given link");
                 response.addString("Enter <reset> to remove all the secondary calibrations");
             }
-            else if (command.get(0).asString() == "calibrate" && command.get(1).isNull()) {
-                response.addString("Entered command <calibrate> is missing the linkName. Enter help to know available commands");
+            else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull() && !command.get(2).isNull()) {
+                this->parentLinkName = command.get(1).asString();
+                this->childLinkName = command.get(2).asString();
+                response.addString("Entered command <calibrate> is correct, setting the offset for the chain from " + this->parentLinkName + " to " + this->childLinkName);
                 this->cmdStatus = true;
-                this->linkName = "";
             }
             else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull()) {
-                this->linkName = command.get(1).asString();
-                response.addString("Entered command <calibrate> is correct, setting the offset calibration for the link " + this->linkName);
+                this->parentLinkName = command.get(1).asString();
+                response.addString("Entered command <calibrate> is correct, setting the offset calibration for the link " + this->parentLinkName);
+                this->cmdStatus = true;
+            }
+            else if (command.get(0).asString() == "calibrate") {
+                response.addString("Entered command <calibrate> is missing the linkName. Setting the offset calibartion for all the links");
                 this->cmdStatus = true;
             }
             else if (command.get(0).asString() == "reset" && command.get(1).isNull()) {
                 response.addString("Entered command <reset> is correct, removing all the secondary calibrations ");
                 this->cmdStatus = true;
                 this->cmdErease = true;
-                this->linkName = "";
             }
             else if (command.get(0).asString() == "reset" && !command.get(1).isNull()) {
-                this->linkName = command.get(1).asString();
-                response.addString("Entered command <reset> is correct, removing the secondaty calibration for the link " + this->linkName);
+                this->parentLinkName = command.get(1).asString();
+                response.addString("Entered command <reset> is correct, removing the secondaty calibration for the link " + this->parentLinkName);
                 this->cmdStatus = true;
                 this->cmdErease = true;
             }
@@ -1129,7 +1138,8 @@ void HumanStateProvider::run()
 
     // Check for rpc command status
     if (pImpl->commandPro.cmdStatus) {
-        std::string linkName = pImpl->commandPro.linkName;
+        std::string linkName = pImpl->commandPro.parentLinkName;
+        std::string childLinkName = pImpl->commandPro.childLinkName;
         if (pImpl->commandPro.cmdErease && linkName == "")
         {
             pImpl->secondaryCalibrationRotations.clear();
@@ -1160,10 +1170,13 @@ void HumanStateProvider::run()
         else if (pImpl->wearableStorage.modelToWearable_LinkName.find(linkName) == pImpl->wearableStorage.modelToWearable_LinkName.end()) {
             yWarning() << LogPrefix << "link " << linkName << " choosen for secondaty calibration is not valid";
         }
+        else if (childLinkName != "" && pImpl->wearableStorage.modelToWearable_LinkName.find(childLinkName) == pImpl->wearableStorage.modelToWearable_LinkName.end()) {
+            yWarning() << LogPrefix << "link " << childLinkName << " choosen for secondaty calibration is not valid";
+        }
         else if (pImpl->commandPro.cmdErease) {
             pImpl->secondaryCalibrationRotations.erase(linkName);
         }
-        else {
+        else if (childLinkName == "") {
             iDynTree::VectorDynSize jointPos;
             jointPos.resize(kindyncomputations->getNrOfDegreesOfFreedom());
             kindyncomputations->getJointPos(jointPos);
@@ -1191,10 +1204,42 @@ void HumanStateProvider::run()
             }
             pImpl->secondaryCalibrationRotations.emplace(linkName,secondaryCalibrationRotation);
         }
+        else {
+            // create reduced model between parent and child frame
+            iDynTree::Model chainModel;
+            getReducedModel(kindyncomputations->model(), linkName, childLinkName, chainModel);
+
+            iDynTree::VectorDynSize jointPos;
+            jointPos.resize(kindyncomputations->getNrOfDegreesOfFreedom());
+            kindyncomputations->getJointPos(jointPos);
+
+            for (size_t chainModelJointIndex = 0; chainModelJointIndex < chainModel.getNrOfJoints(); chainModelJointIndex++) {
+                std::string jointName = chainModel.getJointName(chainModelJointIndex);
+                yInfo() << "setting to zero joint: " << jointName;
+                jointPos.setVal(kindyncomputations->model().getJointIndex(jointName), 0);
+            }
+            kindyncomputations->setJointPos(jointPos);
+
+            for (size_t chainModelLinkIndex = 0; chainModelLinkIndex < chainModel.getNrOfFrames(); chainModelLinkIndex ++) {
+                std::string linkName = chainModel.getFrameName(chainModelLinkIndex);
+                yInfo() << "preparing to compute calibration matrix for link " << linkName;
+                if (!(pImpl->wearableStorage.modelToWearable_LinkName.find(linkName) == pImpl->wearableStorage.modelToWearable_LinkName.end())) {
+                    iDynTree::Rotation linkRotationZero = kindyncomputations->getWorldTransform(kindyncomputations->model().getLinkIndex(linkName)).getRotation();
+                    iDynTree::Rotation secondaryCalibrationRotation = pImpl->linkTransformMatrices.at(linkName).getRotation().inverse() * linkRotationZero;
+                    yInfo() << "secondary calibration rotation for " << linkName;
+                    yInfo() << secondaryCalibrationRotation.toString();
+                    if (!(pImpl->secondaryCalibrationRotations.find(linkName) == pImpl->secondaryCalibrationRotations.end()))
+                    {
+                        yWarning() << LogPrefix << "discarting previous secondary calibration for " << linkName;
+                        pImpl->secondaryCalibrationRotations.erase(linkName);
+                    }
+                    pImpl->secondaryCalibrationRotations.emplace(linkName,secondaryCalibrationRotation);
+                }
+            }
+        }
     }
 
     // Set rpc command status to false
-    pImpl->commandPro.linkName = "";
     pImpl->commandPro.cmdStatus = false;
     pImpl->commandPro.cmdErease = false;
 
@@ -1424,6 +1469,7 @@ bool HumanStateProvider::impl::createLinkPairs()
         pairInfo.childFrameName = pairNames[index].second;
         pairInfo.childFrameSegmentsIndex = pairSegmentIndeces[index].second;
 
+        yInfo() << "getting the reduced model from: " << pairInfo.parentFrameName << " to " << pairInfo.childFrameName;
         // Get the reduced pair model
         if (!getReducedModel(humanModel,
                              pairInfo.parentFrameName,
