@@ -1267,8 +1267,9 @@ bool HumanStateProvider::impl::applyRpcCommand()
                 jointZeroIndices.push_back(kinDynComputations->model().getJointIndex(jointName));
             }
             // select the links found in the submodel
-            for (size_t chainModelLinkIndex = 0; chainModelLinkIndex < chainModel.getNrOfFrames(); chainModelLinkIndex ++) {
-                std::string chainLinkName = chainModel.getFrameName(chainModelLinkIndex);
+            // TODO missing fake links that are frames
+            for (size_t chainModelLinkIndex = 0; chainModelLinkIndex < chainModel.getNrOfLinks(); chainModelLinkIndex ++) {
+                std::string chainLinkName = chainModel.getLinkName(chainModelLinkIndex);
                 linkToCalibrateIndices.push_back(kinDynComputations->model().getLinkIndex(chainLinkName));
             }
         }
