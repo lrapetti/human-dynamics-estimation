@@ -164,6 +164,7 @@ public:
     // Buffers
     std::unordered_map<std::string, iDynTree::Rotation> linkRotationMatrices;
     std::unordered_map<std::string, iDynTree::Transform> linkTransformMatrices;
+    std::unordered_map<std::string, iDynTree::Transform> linkTransformMatricesRaw;
     std::unordered_map<std::string, iDynTree::Rotation> linkOrientationMatrices;
     std::unordered_map<std::string, iDynTree::Twist> linkVelocities;
     iDynTree::VectorDynSize jointConfigurationSolution;
@@ -240,6 +241,9 @@ public:
     bool getJointAnglesFromInputData(iDynTree::VectorDynSize& jointAngles);
     bool getLinkTransformFromInputData(std::unordered_map<std::string, iDynTree::Transform>& t);
     bool getLinkVelocityFromInputData(std::unordered_map<std::string, iDynTree::Twist>& t);
+
+    // calibrate data
+    bool applySecondaryCalibration(const std::unordered_map<std::string, iDynTree::Transform>& t_in, std::unordered_map<std::string, iDynTree::Transform>& t_out);
 
     // solver initialization and update
     bool createLinkPairs();
@@ -1053,8 +1057,15 @@ bool HumanStateProvider::close()
 void HumanStateProvider::run()
 {
     // Get the link transformations from input data
-    if (!pImpl->getLinkTransformFromInputData(pImpl->linkTransformMatrices)) {
+    if (!pImpl->getLinkTransformFromInputData(pImpl->linkTransformMatricesRaw)) {
         yError() << LogPrefix << "Failed to get link transforms from input data";
+        askToStop();
+        return;
+    }
+
+    // Apply the secondart calibration to input data
+    if (!pImpl->applySecondaryCalibration(pImpl->linkTransformMatricesRaw, pImpl->linkTransformMatrices)) {
+        yError() << LogPrefix << "Failed to apply secondary calibration to input data";
         askToStop();
         return;
     }
@@ -1280,7 +1291,7 @@ bool HumanStateProvider::impl::applyRpcCommand()
                 }
                 // computing new calibration
                 iDynTree::Rotation linkRotationZero = kinDynComputations->getWorldTransform(kinDynComputations->model().getLinkIndex(linkToCalibrateName)).getRotation();
-                iDynTree::Rotation secondaryCalibrationRotation = linkTransformMatrices.at(linkToCalibrateName).getRotation().inverse() * linkRotationZero;
+                iDynTree::Rotation secondaryCalibrationRotation = linkTransformMatricesRaw.at(linkToCalibrateName).getRotation().inverse() * linkRotationZero;
                 // add new calibration
                 secondaryCalibrationRotations.emplace(linkToCalibrateName,secondaryCalibrationRotation);
                 yInfo() << LogPrefix << "secondary calibration for " << linkToCalibrateName << " is set";
@@ -1338,24 +1349,30 @@ bool HumanStateProvider::impl::getLinkTransformFromInputData(
         iDynTree::Rotation rotation;
         rotation.fromQuaternion({orientation.data(), 4});
 
-        // Apply secondary calibration to the rotation
-        if (!(secondaryCalibrationRotations.find(modelLinkName)
-              == secondaryCalibrationRotations.end())) {
-            yInfo() << "secondary calibration matrix is: ";
-            yInfo() << secondaryCalibrationRotations.at(modelLinkName).toString();
-            yInfo() << "applying secondary calibration for " << modelLinkName;
-            yInfo() << "before";
-            yInfo() << rotation.toString();
-            rotation = rotation * secondaryCalibrationRotations.at(modelLinkName);
-            yInfo() << "after";
-            yInfo() << rotation.toString();
-        }
-
         iDynTree::Transform transform(rotation, pos);
 
         // Note that this map is used during the IK step for setting a target transform to a
         // link of the model. For this reason the map keys are model names.
         transforms[modelLinkName] = std::move(transform);
+    }
+
+    return true;
+}
+
+bool HumanStateProvider::impl::applySecondaryCalibration(
+        const std::unordered_map<std::string, iDynTree::Transform> &transforms_in, std::unordered_map<std::string, iDynTree::Transform> &transforms_out)
+{
+    transforms_out = transforms_in;
+
+    for (const auto& linkMapEntry : wearableStorage.modelToWearable_LinkName) {
+        const ModelLinkName& modelLinkName = linkMapEntry.first;
+        if (!(secondaryCalibrationRotations.find(modelLinkName)
+              == secondaryCalibrationRotations.end())) {
+            iDynTree::Rotation rotation = transforms_out[modelLinkName].getRotation();
+            rotation = rotation * secondaryCalibrationRotations.at(modelLinkName);
+
+            transforms_out[modelLinkName].setRotation(rotation);
+        }
     }
 
     return true;
