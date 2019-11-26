@@ -132,79 +132,6 @@ struct WearableStorage
         jointSensorsMap;
 };
 
-class CmdParser : public yarp::os::PortReader
-{
-
-public:
-    std::atomic<bool> cmdStatus{false};
-    std::atomic<bool> cmdErease{false};
-    std::string parentLinkName;
-    std::string childLinkName;
-
-    bool read(yarp::os::ConnectionReader& connection) override
-    {
-        this->parentLinkName = "";
-        this->childLinkName = "";
-
-        yarp::os::Bottle command, response;
-        if (command.read(connection)) {
-
-            if (command.get(0).asString() == "help") {
-                response.addString("Enter <calibrate> to apply a secondary calibration for all the links");
-                response.addString("Enter <calibrate <linkName>> to apply a secondary calibration for the given link");
-                response.addString("Enter <calibrate <parentLinkName> <childLinkName>> to apply a secondary calibration for the given chain");
-                response.addString("Enter <reset <linkName>> to remove secondary calibration for the given link");
-                response.addString("Enter <reset> to remove all the secondary calibrations");
-            }
-            else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull() && !command.get(2).isNull()) {
-                this->parentLinkName = command.get(1).asString();
-                this->childLinkName = command.get(2).asString();
-                response.addString("Entered command <calibrate> is correct, setting the offset for the chain from " + this->parentLinkName + " to " + this->childLinkName);
-                this->cmdStatus = true;
-            }
-            else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull()) {
-                this->parentLinkName = command.get(1).asString();
-                response.addString("Entered command <calibrate> is correct, setting the offset calibration for the link " + this->parentLinkName);
-                this->cmdStatus = true;
-            }
-            else if (command.get(0).asString() == "calibrate") {
-                response.addString("Entered command <calibrate> is missing the linkName. Setting the offset calibartion for all the links");
-                this->cmdStatus = true;
-            }
-            else if (command.get(0).asString() == "reset" && command.get(1).isNull()) {
-                response.addString("Entered command <reset> is correct, removing all the secondary calibrations ");
-                this->cmdStatus = true;
-                this->cmdErease = true;
-            }
-            else if (command.get(0).asString() == "reset" && !command.get(1).isNull()) {
-                this->parentLinkName = command.get(1).asString();
-                response.addString("Entered command <reset> is correct, removing the secondaty calibration for the link " + this->parentLinkName);
-                this->cmdStatus = true;
-                this->cmdErease = true;
-            }
-            else {
-                response.addString(
-                    "Entered command is incorrect. Enter help to know available commands");
-            }
-        }
-        else {
-            this->cmdStatus = false;
-            this->cmdErease = false;
-            return false;
-        }
-
-        yarp::os::ConnectionWriter* reply = connection.getWriter();
-
-        if (reply != NULL) {
-            response.write(*reply);
-        }
-        else
-            return false;
-
-        return true;
-    }
-};
-
 class HumanStateProvider::impl
 {
 public:
@@ -218,7 +145,8 @@ public:
     mutable std::mutex mutex;
 
     // Rpc
-    CmdParser commandPro;
+    class CmdParser;
+    std::unique_ptr<CmdParser> commandPro;
     yarp::os::RpcServer rpcPort;
 
     // Wearable variables
@@ -340,7 +268,96 @@ public:
         iDynTree::VectorDynSize jointVelocities,
         iDynTree::Twist baseVelocity,
         std::unordered_map<std::string, iDynTree::Vector3>& linkAngularVelocityError);
+
+    // constructor
+    impl();
 };
+
+// ===============
+// RPC PORT PARSER
+// ===============
+
+class HumanStateProvider::impl::CmdParser : public yarp::os::PortReader
+{
+
+public:
+    std::atomic<bool> cmdStatus{false};
+    std::atomic<bool> cmdErease{false};
+    std::string parentLinkName;
+    std::string childLinkName;
+
+    bool read(yarp::os::ConnectionReader& connection) override
+    {
+        this->parentLinkName = "";
+        this->childLinkName = "";
+
+        yarp::os::Bottle command, response;
+        if (command.read(connection)) {
+
+            if (command.get(0).asString() == "help") {
+                response.addString("Enter <calibrate> to apply a secondary calibration for all the links");
+                response.addString("Enter <calibrate <linkName>> to apply a secondary calibration for the given link");
+                response.addString("Enter <calibrate <parentLinkName> <childLinkName>> to apply a secondary calibration for the given chain");
+                response.addString("Enter <reset <linkName>> to remove secondary calibration for the given link");
+                response.addString("Enter <reset> to remove all the secondary calibrations");
+            }
+            else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull() && !command.get(2).isNull()) {
+                this->parentLinkName = command.get(1).asString();
+                this->childLinkName = command.get(2).asString();
+                response.addString("Entered command <calibrate> is correct, setting the offset for the chain from " + this->parentLinkName + " to " + this->childLinkName);
+                this->cmdStatus = true;
+            }
+            else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull()) {
+                this->parentLinkName = command.get(1).asString();
+                response.addString("Entered command <calibrate> is correct, setting the offset calibration for the link " + this->parentLinkName);
+                this->cmdStatus = true;
+            }
+            else if (command.get(0).asString() == "calibrate") {
+                response.addString("Entered command <calibrate> is missing the linkName. Setting the offset calibartion for all the links");
+                this->cmdStatus = true;
+            }
+            else if (command.get(0).asString() == "reset" && command.get(1).isNull()) {
+                response.addString("Entered command <reset> is correct, removing all the secondary calibrations ");
+                this->cmdStatus = true;
+                this->cmdErease = true;
+            }
+            else if (command.get(0).asString() == "reset" && !command.get(1).isNull()) {
+                this->parentLinkName = command.get(1).asString();
+                response.addString("Entered command <reset> is correct, removing the secondaty calibration for the link " + this->parentLinkName);
+                this->cmdStatus = true;
+                this->cmdErease = true;
+            }
+            else {
+                response.addString(
+                    "Entered command is incorrect. Enter help to know available commands");
+            }
+        }
+        else {
+            this->cmdStatus = false;
+            this->cmdErease = false;
+            return false;
+        }
+
+        yarp::os::ConnectionWriter* reply = connection.getWriter();
+
+        if (reply != NULL) {
+            response.write(*reply);
+        }
+        else
+            return false;
+
+        return true;
+    }
+};
+
+// ===========
+// CONSTRUCTOR
+// ===========
+
+HumanStateProvider::impl::impl()
+    : commandPro(new CmdParser())
+{}
+
 
 // =========================
 // HUMANSTATEPROVIDER DEVICE
@@ -1015,7 +1032,7 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     }
 
     // Set rpc port reader
-    pImpl->rpcPort.setReader(pImpl->commandPro);
+    pImpl->rpcPort.setReader(*pImpl->commandPro);
 
     return true;
 }
@@ -1137,14 +1154,14 @@ void HumanStateProvider::run()
     }
 
     // Check for rpc command status
-    if (pImpl->commandPro.cmdStatus) {
-        std::string linkName = pImpl->commandPro.parentLinkName;
-        std::string childLinkName = pImpl->commandPro.childLinkName;
-        if (pImpl->commandPro.cmdErease && linkName == "")
+    if (pImpl->commandPro->cmdStatus) {
+        std::string linkName = pImpl->commandPro->parentLinkName;
+        std::string childLinkName = pImpl->commandPro->childLinkName;
+        if (pImpl->commandPro->cmdErease && linkName == "")
         {
             pImpl->secondaryCalibrationRotations.clear();
         }
-        else if (!pImpl->commandPro.cmdErease && linkName == "")
+        else if (!pImpl->commandPro->cmdErease && linkName == "")
         {
             iDynTree::VectorDynSize jointPos;
             jointPos.resize(kindyncomputations->getNrOfDegreesOfFreedom());
@@ -1173,7 +1190,7 @@ void HumanStateProvider::run()
         else if (childLinkName != "" && pImpl->wearableStorage.modelToWearable_LinkName.find(childLinkName) == pImpl->wearableStorage.modelToWearable_LinkName.end()) {
             yWarning() << LogPrefix << "link " << childLinkName << " choosen for secondaty calibration is not valid";
         }
-        else if (pImpl->commandPro.cmdErease) {
+        else if (pImpl->commandPro->cmdErease) {
             pImpl->secondaryCalibrationRotations.erase(linkName);
         }
         else if (childLinkName == "") {
@@ -1240,8 +1257,8 @@ void HumanStateProvider::run()
     }
 
     // Set rpc command status to false
-    pImpl->commandPro.cmdStatus = false;
-    pImpl->commandPro.cmdErease = false;
+    pImpl->commandPro->cmdStatus = false;
+    pImpl->commandPro->cmdErease = false;
 
     // compute the inverse kinematic errors (currently the result is unused, but it may be used for
     // evaluating the IK performance)
