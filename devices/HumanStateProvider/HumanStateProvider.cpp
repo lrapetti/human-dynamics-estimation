@@ -17,6 +17,7 @@
 #include <yarp/os/LogStream.h>
 #include <yarp/os/ResourceFinder.h>
 #include <yarp/os/RpcServer.h>
+#include <yarp/os/Vocab.h>
 
 #include <iDynTree/Core/EigenHelpers.h>
 #include <iDynTree/Model/Traversal.h>
@@ -295,11 +296,13 @@ public:
         if (command.read(connection)) {
 
             if (command.get(0).asString() == "help") {
-                response.addString("Enter <calibrate> to apply a secondary calibration for all the links");
-                response.addString("Enter <calibrate <linkName>> to apply a secondary calibration for the given link");
-                response.addString("Enter <calibrate <parentLinkName> <childLinkName>> to apply a secondary calibration for the given chain");
-                response.addString("Enter <reset <linkName>> to remove secondary calibration for the given link");
-                response.addString("Enter <reset> to remove all the secondary calibrations");
+                response.addVocab(yarp::os::Vocab::encode("many"));
+                response.addString("The following commands can be used to apply a secondary calibration assuming the subject is in the zero configuration of the model for the calibrated links. \n"
+                                   "Enter <calibrate> to apply a secondary calibration for all the links \n"
+                                   "Enter <calibrate <linkName>> to apply a secondary calibration for the given link \n"
+                                   "Enter <calibrate <parentLinkName> <childLinkName>> to apply a secondary calibration for the given chain \n"
+                                   "Enter <reset <linkName>> to remove secondary calibration for the given link \n"
+                                   "Enter <reset> to remove all the secondary calibrations");
             }
             else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull() && !command.get(2).isNull()) {
                 this->parentLinkName = command.get(1).asString();
@@ -313,7 +316,7 @@ public:
                 this->cmdStatus = true;
             }
             else if (command.get(0).asString() == "calibrate") {
-                response.addString("Entered command <calibrate> is missing the linkName. Setting the offset calibartion for all the links");
+                response.addString("Setting the offset calibartion for all the links");
                 this->cmdStatus = true;
             }
             else if (command.get(0).asString() == "reset" && command.get(1).isNull()) {
