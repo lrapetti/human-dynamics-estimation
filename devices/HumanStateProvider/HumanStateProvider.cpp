@@ -1364,13 +1364,13 @@ bool HumanStateProvider::impl::applySecondaryCalibration(
         const std::unordered_map<std::string, iDynTree::Transform> &transforms_in, std::unordered_map<std::string, iDynTree::Transform> &transforms_out)
 {
     transforms_out = transforms_in;
-
     for (const auto& linkMapEntry : wearableStorage.modelToWearable_LinkName) {
         const ModelLinkName& modelLinkName = linkMapEntry.first;
-        if (!(secondaryCalibrationRotations.find(modelLinkName)
+        auto secondaryCalibrationRotationsIt = secondaryCalibrationRotations.find(modelLinkName);
+        if (!(secondaryCalibrationRotationsIt
               == secondaryCalibrationRotations.end())) {
             iDynTree::Rotation rotation = transforms_out[modelLinkName].getRotation();
-            rotation = rotation * secondaryCalibrationRotations.at(modelLinkName);
+            rotation = rotation * secondaryCalibrationRotationsIt->second;
 
             transforms_out[modelLinkName].setRotation(rotation);
         }
