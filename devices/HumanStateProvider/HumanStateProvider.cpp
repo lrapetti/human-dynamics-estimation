@@ -219,8 +219,12 @@ public:
     iDynTree::VectorDynSize baseVelocityLowerLimit;
     double k_u, k_l;
 
-    // Secondary calibration maps
+    // Secondary calibration
     std::unordered_map<std::string, iDynTree::Rotation> secondaryCalibrationRotations;
+    void ereaseSecondaryCalibration(const std::string linkName);
+    void selectJointsAndLinksForSecondaryCalibration(const std::string linkName, const std::string childLinkName,
+                                                  std::vector<iDynTree::JointIndex> jointZeroIndices, std::vector<iDynTree::LinkIndex> linkToCalibrateIndices);
+    void computeSecondaryCalibrationRotations(const std::vector<iDynTree::JointIndex> jointZeroIndices, const std::vector<iDynTree::LinkIndex> linkToCalibrateIndices);
 
     SolverIK ikSolver;
 
@@ -1201,6 +1205,94 @@ void HumanStateProvider::run()
     //                                          pImpl->linkErrorAngularVelocities);
 }
 
+void HumanStateProvider::impl::ereaseSecondaryCalibration(const std::string linkName)
+{
+    if (linkName != "") {
+        secondaryCalibrationRotations.erase(linkName);
+        yInfo() << LogPrefix << "Discarding the secondary calibration matrix for link " << linkName;
+    }
+    else {
+        secondaryCalibrationRotations.clear();
+        yInfo() << LogPrefix << "Discarding all the secondary calibration matrices";
+    }
+}
+
+void HumanStateProvider::impl::selectJointsAndLinksForSecondaryCalibration(const std::string linkName, const std::string childLinkName,
+                                              std::vector<iDynTree::JointIndex> jointZeroIndices, std::vector<iDynTree::LinkIndex> linkToCalibrateIndices)
+{
+    if (linkName == "") {
+        // add all the joints of the model
+        jointZeroIndices.resize(kinDynComputations->getNrOfDegreesOfFreedom());
+        std::iota(jointZeroIndices.begin(), jointZeroIndices.end(), 0);
+        // add all the links of the model
+        linkToCalibrateIndices.resize(kinDynComputations->getNrOfLinks());
+        std::iota(linkToCalibrateIndices.begin(), linkToCalibrateIndices.end(), 0);
+    }
+    else if (childLinkName == "") {
+        // select joints between the given link [linkName] and the parent link
+        for (auto pairInfo = linkPairs.begin(); pairInfo != linkPairs.end(); pairInfo++)
+        {
+            if (pairInfo->parentFrameName == linkName) {
+                // set the joint between the parent and the child frame to zero
+                for (size_t pairModelJointIndex = 0; pairModelJointIndex < pairInfo->pairModel.getNrOfJoints(); pairModelJointIndex++) {
+                    std::string jointName = pairInfo->pairModel.getJointName(pairModelJointIndex);
+                    jointZeroIndices.push_back(kinDynComputations->model().getJointIndex(jointName));
+                }
+                break;
+            }
+        }
+        // select the given link [linkName]
+        linkToCalibrateIndices.push_back(kinDynComputations->model().getLinkIndex(linkName));
+    }
+    else {
+        // create reduced model between parent and child frame
+        iDynTree::Model chainModel;
+        getReducedModel(kinDynComputations->model(), linkName, childLinkName, chainModel);
+        // select the joints found in the submodel
+        for (size_t chainModelJointIndex = 0; chainModelJointIndex < chainModel.getNrOfJoints(); chainModelJointIndex++) {
+            std::string jointName = chainModel.getJointName(chainModelJointIndex);
+            jointZeroIndices.push_back(kinDynComputations->model().getJointIndex(jointName));
+        }
+        // select the links found in the submodel
+        // TODO missing fake links that are frames
+        for (size_t chainModelLinkIndex = 0; chainModelLinkIndex < chainModel.getNrOfLinks(); chainModelLinkIndex ++) {
+            std::string chainLinkName = chainModel.getLinkName(chainModelLinkIndex);
+            linkToCalibrateIndices.push_back(kinDynComputations->model().getLinkIndex(chainLinkName));
+        }
+    }
+}
+
+void HumanStateProvider::impl::computeSecondaryCalibrationRotations(const std::vector<iDynTree::JointIndex> jointZeroIndices, const std::vector<iDynTree::LinkIndex> linkToCalibrateIndices)
+{
+    // setting to zero all the selected joints
+    iDynTree::VectorDynSize jointPos;
+    jointPos.resize(kinDynComputations->getNrOfDegreesOfFreedom());
+    kinDynComputations->getJointPos(jointPos);
+    for (auto const& jointZeroIdx: jointZeroIndices) {
+        jointPos.setVal(jointZeroIdx, 0);
+    }
+    kinDynComputations->setJointPos(jointPos);
+
+    // computing the secondary calibration matrices
+    for (auto const& linkToCalibrateIdx: linkToCalibrateIndices) {
+        std::string linkToCalibrateName = kinDynComputations->model().getLinkName(linkToCalibrateIdx);
+        if (!(wearableStorage.modelToWearable_LinkName.find(linkToCalibrateName) == wearableStorage.modelToWearable_LinkName.end())) {
+            // discarding previous calibration
+            if (!(secondaryCalibrationRotations.find(linkToCalibrateName) == secondaryCalibrationRotations.end()))
+            {
+                yWarning() << LogPrefix << "discarting previous secondary calibration for " << linkToCalibrateName;
+                secondaryCalibrationRotations.erase(linkToCalibrateName);
+            }
+            // computing new calibration
+            iDynTree::Rotation linkRotationZero = kinDynComputations->getWorldTransform(kinDynComputations->model().getLinkIndex(linkToCalibrateName)).getRotation();
+            iDynTree::Rotation secondaryCalibrationRotation = linkTransformMatricesRaw.at(linkToCalibrateName).getRotation().inverse() * linkRotationZero;
+            // add new calibration
+            secondaryCalibrationRotations.emplace(linkToCalibrateName,secondaryCalibrationRotation);
+            yInfo() << LogPrefix << "secondary calibration for " << linkToCalibrateName << " is set";
+        }
+    }
+}
+
 bool HumanStateProvider::impl::applyRpcCommand()
 {
     // check is the choosen links are valid
@@ -1216,91 +1308,19 @@ bool HumanStateProvider::impl::applyRpcCommand()
     }
 
     if (commandPro->cmdErease) {
-        if (linkName != "") {
-            secondaryCalibrationRotations.erase(linkName);
-            yInfo() << LogPrefix << "Discarding the secondary calibration matrix for link " << linkName;
-        }
-        else {
-            secondaryCalibrationRotations.clear();
-            yInfo() << LogPrefix << "Discarding all the secondary calibration matrices";
-        }
+        ereaseSecondaryCalibration(linkName);
+        return true;
     }
     else {
-        iDynTree::VectorDynSize jointPos;
-        jointPos.resize(kinDynComputations->getNrOfDegreesOfFreedom());
-        kinDynComputations->getJointPos(jointPos);
-
         // Select the joints to be set to zero and the link to be add the secondary calibration
         std::vector<iDynTree::JointIndex> jointZeroIndices;
         std::vector<iDynTree::LinkIndex> linkToCalibrateIndices;
-        if (linkName == "") {
-            // add all the joints of the model
-            jointZeroIndices.resize(kinDynComputations->getNrOfDegreesOfFreedom());
-            std::iota(jointZeroIndices.begin(), jointZeroIndices.end(), 0);
-            // add all the links of the model
-            linkToCalibrateIndices.resize(kinDynComputations->getNrOfLinks());
-            std::iota(linkToCalibrateIndices.begin(), linkToCalibrateIndices.end(), 0);
-        }
-        else if (childLinkName == "") {
-            // select joints between the given link [linkName] and the parent link
-            for (auto pairInfo = linkPairs.begin(); pairInfo != linkPairs.end(); pairInfo++)
-            {
-                if (pairInfo->parentFrameName == linkName) {
-                    // set the joint between the parent and the child frame to zero
-                    for (size_t pairModelJointIndex = 0; pairModelJointIndex < pairInfo->pairModel.getNrOfJoints(); pairModelJointIndex++) {
-                        std::string jointName = pairInfo->pairModel.getJointName(pairModelJointIndex);
-                        jointZeroIndices.push_back(kinDynComputations->model().getJointIndex(jointName));
-                    }
-                    break;
-                }
-            }
-            // select the given link [linkName]
-            linkToCalibrateIndices.push_back(kinDynComputations->model().getLinkIndex(linkName));
-        }
-        else {
-            // create reduced model between parent and child frame
-            iDynTree::Model chainModel;
-            getReducedModel(kinDynComputations->model(), linkName, childLinkName, chainModel);
-            // select the joints found in the submodel
-            for (size_t chainModelJointIndex = 0; chainModelJointIndex < chainModel.getNrOfJoints(); chainModelJointIndex++) {
-                std::string jointName = chainModel.getJointName(chainModelJointIndex);
-                jointZeroIndices.push_back(kinDynComputations->model().getJointIndex(jointName));
-            }
-            // select the links found in the submodel
-            // TODO missing fake links that are frames
-            for (size_t chainModelLinkIndex = 0; chainModelLinkIndex < chainModel.getNrOfLinks(); chainModelLinkIndex ++) {
-                std::string chainLinkName = chainModel.getLinkName(chainModelLinkIndex);
-                linkToCalibrateIndices.push_back(kinDynComputations->model().getLinkIndex(chainLinkName));
-            }
-        }
+        selectJointsAndLinksForSecondaryCalibration(linkName, childLinkName, jointZeroIndices, linkToCalibrateIndices);
 
-        // setting to zero all the selected joints
-        for (auto const& jointZeroIdx: jointZeroIndices) {
-            jointPos.setVal(jointZeroIdx, 0);
-        }
-        kinDynComputations->setJointPos(jointPos);
-
-        // computing the secondary calibration matrices
-        for (auto const& linkToCalibrateIdx: linkToCalibrateIndices) {
-            std::string linkToCalibrateName = kinDynComputations->model().getLinkName(linkToCalibrateIdx);
-            if (!(wearableStorage.modelToWearable_LinkName.find(linkToCalibrateName) == wearableStorage.modelToWearable_LinkName.end())) {
-                // discarding previous calibration
-                if (!(secondaryCalibrationRotations.find(linkToCalibrateName) == secondaryCalibrationRotations.end()))
-                {
-                    yWarning() << LogPrefix << "discarting previous secondary calibration for " << linkToCalibrateName;
-                    secondaryCalibrationRotations.erase(linkToCalibrateName);
-                }
-                // computing new calibration
-                iDynTree::Rotation linkRotationZero = kinDynComputations->getWorldTransform(kinDynComputations->model().getLinkIndex(linkToCalibrateName)).getRotation();
-                iDynTree::Rotation secondaryCalibrationRotation = linkTransformMatricesRaw.at(linkToCalibrateName).getRotation().inverse() * linkRotationZero;
-                // add new calibration
-                secondaryCalibrationRotations.emplace(linkToCalibrateName,secondaryCalibrationRotation);
-                yInfo() << LogPrefix << "secondary calibration for " << linkToCalibrateName << " is set";
-            }
-        }
+        // Compute secondary calibration for the selected links setting to zero the given joints
+        computeSecondaryCalibrationRotations(jointZeroIndices, linkToCalibrateIndices);
+        return true;
     }
-
-    return true;
 }
 
 bool HumanStateProvider::impl::getLinkTransformFromInputData(
