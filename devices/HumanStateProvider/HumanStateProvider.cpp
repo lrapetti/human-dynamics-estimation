@@ -295,6 +295,10 @@ public:
     std::atomic<bool> cmdErease{false};
     std::string parentLinkName;
     std::string childLinkName;
+    yarp::os::Bottle command;
+    yarp::os::Bottle response;
+    yarp::os::ConnectionWriter* reply;
+    yarp::os::ConnectionReader* connectionReader;
 
     void resetInternalVariables()
     {
@@ -306,47 +310,57 @@ public:
 
     bool read(yarp::os::ConnectionReader& connection) override
     {
-        yarp::os::Bottle command, response;
-        if (command.read(connection)) {
+        this->response.clear();
+        this->connectionReader = &connection;
 
-            if (command.get(0).asString() == "help") {
-                response.addVocab(yarp::os::Vocab::encode("many"));
-                response.addString("The following commands can be used to apply a secondary calibration assuming the subject is in the zero configuration of the model for the calibrated links. \n");
-                response.addString("Enter <calibrate> to apply a secondary calibration for all the links \n");
-                response.addString("Enter <calibrate <linkName>> to apply a secondary calibration for the given link \n");
-                response.addString("Enter <calibrate <parentLinkName> <childLinkName>> to apply a secondary calibration for the given chain \n");
-                response.addString("Enter <reset <linkName>> to remove secondary calibration for the given link \n");
-                response.addString("Enter <reset> to remove all the secondary calibrations");
+        if (this->command.read(connection)) {
+
+            if (this->command.get(0).asString() == "help") {
+                this->response.addVocab(yarp::os::Vocab::encode("many"));
+                this->response.addString("The following commands can be used to apply a secondary calibration assuming the subject is in the zero configuration of the model for the calibrated links. \n");
+                this->response.addString("Enter <calibrate> to apply a secondary calibration for all the links \n");
+                this->response.addString("Enter <calibrate <linkName>> to apply a secondary calibration for the given link \n");
+                this->response.addString("Enter <calibrate <parentLinkName> <childLinkName>> to apply a secondary calibration for the given chain \n");
+                this->response.addString("Enter <reset <linkName>> to remove secondary calibration for the given link \n");
+                this->response.addString("Enter <reset> to remove all the secondary calibrations");
             }
-            else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull() && !command.get(2).isNull()) {
-                this->parentLinkName = command.get(1).asString();
-                this->childLinkName = command.get(2).asString();
-                response.addString("Entered command <calibrate> is correct, setting the offset for the chain from " + this->parentLinkName + " to " + this->childLinkName);
+            else if (this->command.get(0).asString() == "calibrate" && !this->command.get(1).isNull() && !this->command.get(2).isNull()) {
+                this->parentLinkName = this->command.get(1).asString();
+                this->childLinkName = this->command.get(2).asString();
+                this->response.addString("Entered command <calibrate> is correct, setting the offset for the chain from " + this->parentLinkName + " to " + this->childLinkName);
                 this->cmdStatus = true;
             }
-            else if (command.get(0).asString() == "calibrate" && !command.get(1).isNull()) {
-                this->parentLinkName = command.get(1).asString();
-                response.addString("Entered command <calibrate> is correct, setting the offset calibration for the link " + this->parentLinkName);
+            else if (this->command.get(0).asString() == "calibrate" && !this->command.get(1).isNull()) {
+                this->parentLinkName = this->command.get(1).asString();
+                this->response.addString("Entered command <calibrate> is correct, setting the offset calibration for the link " + this->parentLinkName);
                 this->cmdStatus = true;
             }
-            else if (command.get(0).asString() == "calibrate") {
-                response.addString("Setting the offset calibartion for all the links");
+            else if (this->command.get(0).asString() == "calibrate") {
+                this->response.addString("Setting the offset calibartion for all the links");
                 this->cmdStatus = true;
             }
-            else if (command.get(0).asString() == "reset" && command.get(1).isNull()) {
-                response.addString("Entered command <reset> is correct, removing all the secondary calibrations ");
+            else if (this->command.get(0).asString() == "reset" && this->command.get(1).isNull()) {
+                this->response.addString("Entered command <reset> is correct, removing all the secondary calibrations ");
                 this->cmdStatus = true;
                 this->cmdErease = true;
             }
-            else if (command.get(0).asString() == "reset" && !command.get(1).isNull()) {
-                this->parentLinkName = command.get(1).asString();
-                response.addString("Entered command <reset> is correct, removing the secondaty calibration for the link " + this->parentLinkName);
+            else if (this->command.get(0).asString() == "reset" && !this->command.get(1).isNull()) {
+                this->parentLinkName = this->command.get(1).asString();
+                this->response.addString("Entered command <reset> is correct, removing the secondaty calibration for the link " + this->parentLinkName);
                 this->cmdStatus = true;
                 this->cmdErease = true;
             }
             else {
-                response.addString(
+                this->response.addString(
                     "Entered command is incorrect. Enter help to know available commands");
+
+                this->reply = this->connectionReader->getWriter();
+                if (this->reply != NULL) {
+                    this->response.write(*this->reply);
+                }
+                else {
+                    return false;
+                }
             }
         }
         else {
@@ -354,14 +368,22 @@ public:
             return false;
         }
 
-        yarp::os::ConnectionWriter* reply = connection.getWriter();
+        return true;
+    }
 
-        if (reply != NULL) {
-            response.write(*reply);
+    bool writeResponse(bool rpcCommandValid) {
+        if(!rpcCommandValid) {
+            this->response.clear();
+            this->response.addString("Entered command is correct, but argouments are NOT valid");
         }
-        else
-            return false;
 
+        this->reply = this->connectionReader->getWriter();
+        if (this->reply != NULL) {
+            this->response.write(*this->reply);
+        }
+        else {
+            return false;
+        }
         return true;
     }
 };
@@ -1129,8 +1151,8 @@ void HumanStateProvider::run()
     }
 
     auto tock = std::chrono::high_resolution_clock::now();
-    yDebug() << LogPrefix << "IK took"
-             << std::chrono::duration_cast<std::chrono::milliseconds>(tock - tick).count() << "ms";
+    // yDebug() << LogPrefix << "IK took"
+    //         << std::chrono::duration_cast<std::chrono::milliseconds>(tock - tick).count() << "ms";
 
     // If useDirectBaseMeasurement is true, set the measured base pose and velocity as solution
     if (pImpl->useDirectBaseMeasurement) {
@@ -1184,9 +1206,11 @@ void HumanStateProvider::run()
     if (pImpl->commandPro->cmdStatus) {
 
         // Apply rpc command
-        if (!pImpl->applyRpcCommand()) {
-            yWarning() << LogPrefix << "Failed to execute the rpc command";
-        }
+        bool rpcCommandIsValid;
+        rpcCommandIsValid = pImpl->applyRpcCommand();
+
+        // send response
+        pImpl->commandPro->writeResponse(rpcCommandIsValid);
 
         // reset the rpc internal status
         {
@@ -2636,13 +2660,12 @@ static bool getReducedModel(const iDynTree::Model& modelInput,
     }
 
     if (!loader.loadReducedModelFromFullModel(modelInput, consideredJoints)) {
-        std::cerr << LogPrefix << " failed to select joints: ";
+        yInfo() << LogPrefix << " failed to select joints: ";
         for (std::vector<std::string>::const_iterator i = consideredJoints.begin();
              i != consideredJoints.end();
              ++i) {
-            std::cerr << *i << ' ';
+            yInfo() << *i << ' ';
         }
-        std::cerr << std::endl;
         return false;
     }
 
