@@ -44,7 +44,7 @@
         sparseCholeskyDecomposition,
         robustCholeskyDecomposition,
         sparseRobustCholeskyDecomposition -->
-        <param name='inverseVelocityKinematicsSolver'>QP</param>
+        <param name='inverseVelocityKinematicsSolver'>sparseRobustCholeskyDecomposition</param>
         <param name="linVelTargetWeight">0.0</param>
         <param name="angVelTargetWeight">1.0</param>
         <!-- integration based IK parameters -->
@@ -54,17 +54,17 @@
         <param name="integrationBasedIKIntegralCorrectionGainsLinRot">(0.0 0.0)</param>
         <group name="MODEL_TO_DATA_LINK_NAMES">
             <param name="map_Pelvis">(Pelvis, XsensSuit::vLink::Pelvis)</param>
-            <param name="map_L5">(L5, XsensSuit::vLink::L5)</param>
+            <!--param name="map_L5">(L5, XsensSuit::vLink::L5)</param>
             <param name="map_L3">(L3, XsensSuit::vLink::L3)</param>
             <param name="map_T12">(T12, XsensSuit::vLink::T12)</param>
             <param name="map_T8">(T8, XsensSuit::vLink::T8)</param>
             <param name="map_Neck">(Neck, XsensSuit::vLink::Neck)</param>
             <param name="map_Head">(Head, XsensSuit::vLink::Head)</param>
-            <param name="map_RightShoulder">(RightShoulder, XsensSuit::vLink::RightShoulder)</param>
+            <param name="map_RightShoulder">(RightShoulder, XsensSuit::vLink::RightShoulder)</param-->
             <param name="map_RightUpperArm">(RightUpperArm, XsensSuit::vLink::RightUpperArm)</param>
             <param name="map_RightForeArm">(RightForeArm, XsensSuit::vLink::RightForeArm)</param>
             <param name="map_RightHand">(RightHand, XsensSuit::vLink::RightHand)</param>
-            <param name="map_LeftShoulder">(LeftShoulder, XsensSuit::vLink::LeftShoulder)</param>
+            <!--param name="map_LeftShoulder">(LeftShoulder, XsensSuit::vLink::LeftShoulder)</param>
             <param name="map_LeftUpperArm">(LeftUpperArm, XsensSuit::vLink::LeftUpperArm)</param>
             <param name="map_LeftForeArm">(LeftForeArm, XsensSuit::vLink::LeftForeArm)</param>
             <param name="map_LeftHand">(LeftHand, XsensSuit::vLink::LeftHand)</param>
@@ -75,7 +75,7 @@
             <param name="map_LeftUpperLeg">(LeftUpperLeg, XsensSuit::vLink::LeftUpperLeg)</param>
             <param name="map_LeftLowerLeg">(LeftLowerLeg, XsensSuit::vLink::LeftLowerLeg)</param>
             <param name="map_LeftFoot">(LeftFoot, XsensSuit::vLink::LeftFoot)</param>
-            <param name="map_LeftToe">(LeftToe, XsensSuit::vLink::LeftToe)</param>
+            <param name="map_LeftToe">(LeftToe, XsensSuit::vLink::LeftToe)</param-->
         </group>
         <group name="MODEL_TO_DATA_JOINT_NAMES">
            <!-- TODO: this groups is here for configuring the data that might initialize the IK. -->

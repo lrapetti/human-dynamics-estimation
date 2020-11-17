@@ -1113,12 +1113,12 @@ void HumanStateProvider::run()
     }
 
     // Get base transform from the suit
-    iDynTree::Transform measuredBaseTransform;
-    measuredBaseTransform = pImpl->linkTransformMatrices.at(pImpl->floatingBaseFrame.model);
+    iDynTree::Transform measuredBaseTransform = iDynTree::Transform::Identity();
+    // measuredBaseTransform = pImpl->linkTransformMatrices.at(pImpl->floatingBaseFrame.model);
 
     // Get base velocity from the suit
     iDynTree::Twist measuredBaseVelocity;
-    measuredBaseVelocity = pImpl->linkVelocities.at(pImpl->floatingBaseFrame.model);
+    // measuredBaseVelocity = pImpl->linkVelocities.at(pImpl->floatingBaseFrame.model);
 
     // If useXsensJointAngles is true get joint angles from input data
     if (pImpl->useXsensJointsAngles) {
@@ -2058,13 +2058,12 @@ bool HumanStateProvider::impl::solveIntegrationBasedInverseKinematics()
                 iDynTree::toEigen(integralLinearVelocityError)
                 + iDynTree::toEigen(linearVelocityError) * dt;
             for (int i = 0; i < 3; i++) {
-                linkVelocities[linkName].setVal(i,
-                                                integrationBasedIKMeasuredLinearVelocityGain
-                                                        * linkVelocities[linkName].getVal(i)
-                                                    - integrationBasedIKLinearCorrectionGain
-                                                          * linearVelocityError.getVal(i)
-                                                    - integrationBasedIKIntegralLinearCorrectionGain
-                                                          * integralLinearVelocityError.getVal(i));
+                linkVelocities[linkName].setVal(i,0);
+                angularVelocityError.setVal(i,0);
+                integralOrientationError.setVal(i,0);
+            }
+            for (int i = 3; i < 6; i++) {
+                linkVelocities[linkName].setVal(i,0);
             }
         }
 
