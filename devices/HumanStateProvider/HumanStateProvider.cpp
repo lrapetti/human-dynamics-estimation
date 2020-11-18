@@ -135,7 +135,7 @@ struct WearableStorage
     std::unordered_map<ModelJointName, WearableJointInfo> modelToWearable_JointInfo;
 
     // Maps [wearable virtual sensor name] ==> [virtual sensor]
-    std::unordered_map<WearableLinkName, SensorPtr<const sensor::IVirtualLinkKinSensor>>
+    std::unordered_map<WearableLinkName, SensorPtr<const sensor::ISensor>>
         linkSensorsMap;
     std::unordered_map<WearableJointName, SensorPtr<const sensor::IVirtualSphericalJointKinSensor>>
         jointSensorsMap;
@@ -1427,7 +1427,7 @@ bool HumanStateProvider::impl::getLinkTransformFromInputData(
             return false;
         }
 
-        const wearable::SensorPtr<const sensor::IVirtualLinkKinSensor> sensor =
+        const wearable::SensorPtr<const sensor::ISensor> sensor =
             wearableStorage.linkSensorsMap.at(wearableLinkName);
 
         if (!sensor) {
@@ -1442,21 +1442,30 @@ bool HumanStateProvider::impl::getLinkTransformFromInputData(
             return false;
         }
 
+
         wearable::Vector3 position;
-        if (!sensor->getLinkPosition(position)) {
-            yError() << LogPrefix << "Failed to read link position from virtual link sensor";
-            return false;
-        }
-
-        iDynTree::Position pos(position.at(0), position.at(1), position.at(2));
-
         Quaternion orientation;
-        if (!sensor->getLinkOrientation(orientation)) {
-            yError() << LogPrefix << "Failed to read link orientation from virtual link sensor";
-            return false;
-        }
-
+        iDynTree::Position pos;
         iDynTree::Rotation rotation;
+
+        if (sensor->getSensorType()==wearable::sensor::SensorType::VirtualLinkKinSensor) {
+            auto virtualLinkSensor = iWear->getVirtualLinkKinSensor(wearableLinkName);
+            if (!virtualLinkSensor->getLinkPosition(position)) {
+                yError() << LogPrefix << "Failed to read link position from virtual link sensor";
+                return false;
+            }
+
+            iDynTree::Position pos(position.at(0), position.at(1), position.at(2));
+
+            
+            if (!virtualLinkSensor->getLinkOrientation(orientation)) {
+                yError() << LogPrefix << "Failed to read link orientation from virtual link sensor";
+                return false;
+            }
+        }
+        
+
+        
         rotation.fromQuaternion({orientation.data(), 4});
 
         iDynTree::Transform transform(rotation, pos);
@@ -1505,7 +1514,7 @@ bool HumanStateProvider::impl::getLinkVelocityFromInputData(
             return false;
         }
 
-        const wearable::SensorPtr<const sensor::IVirtualLinkKinSensor> sensor =
+        const wearable::SensorPtr<const sensor::ISensor> sensor =
             wearableStorage.linkSensorsMap.at(wearableLinkName);
 
         if (!sensor) {
@@ -1521,16 +1530,20 @@ bool HumanStateProvider::impl::getLinkVelocityFromInputData(
         }
 
         wearable::Vector3 linearVelocity;
-        if (!sensor->getLinkLinearVelocity(linearVelocity)) {
-            yError() << LogPrefix << "Failed to read link linear velocity from virtual link sensor";
-            return false;
-        }
-
         wearable::Vector3 angularVelocity;
-        if (!sensor->getLinkAngularVelocity(angularVelocity)) {
-            yError() << LogPrefix
-                     << "Failed to read link angular velocity from virtual link sensor";
-            return false;
+
+        if (sensor->getSensorType()==wearable::sensor::SensorType::VirtualLinkKinSensor) {
+            auto virtualLinkSensor = iWear->getVirtualLinkKinSensor(wearableLinkName);
+            if (!virtualLinkSensor->getLinkLinearVelocity(linearVelocity)) {
+                yError() << LogPrefix << "Failed to read link linear velocity from virtual link sensor";
+                return false;
+            }
+
+            if (!virtualLinkSensor->getLinkAngularVelocity(angularVelocity)) {
+                yError() << LogPrefix
+                        << "Failed to read link angular velocity from virtual link sensor";
+                return false;
+            }
         }
 
         velocities[modelLinkName].setVal(0, linearVelocity.at(0));
@@ -2394,21 +2407,21 @@ bool HumanStateProvider::attach(yarp::dev::PolyDriver* poly)
         }
 
         // Get the name of the sensor associated to the link
-        std::string wearableLinkName =
-            pImpl->wearableStorage.modelToWearable_LinkName.at(modelLinkName);
+        std::string wearableSensorName =
+            pImpl->wearableStorage.modelToWearable_LinkName.at(wearableSensorName);
 
         // Try to get the sensor
-        auto sensor = pImpl->iWear->getVirtualLinkKinSensor(wearableLinkName);
+        auto sensor = pImpl->iWear->getSensor(wearableSensorName);
+
+        // auto sensor = pImpl->iWear->getVirtualLinkKinSensor(wearableSensorName);
         if (!sensor) {
-            // yError() << LogPrefix << "Failed to find sensor associated to link" <<
-            // wearableLinkName
-            //<< "from the IWear interface";
+            yError() << LogPrefix << "Failed to find sensor " << wearableSensorName;
             return false;
         }
 
         // Create a sensor map entry using the wearable sensor name as key
-        pImpl->wearableStorage.linkSensorsMap[wearableLinkName] =
-            pImpl->iWear->getVirtualLinkKinSensor(wearableLinkName);
+        pImpl->wearableStorage.linkSensorsMap[wearableSensorName] =
+            pImpl->iWear->getSensor(wearableSensorName);
     }
 
     // ============
