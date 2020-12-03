@@ -330,6 +330,7 @@ public:
     size_t dynamicsNumberOfJoints;
     std::vector<std::string> dynamicsJointNames;
     std::vector<double> jointTorquesVec;
+    std::vector<std::vector<double>> internalWrenchesVec;
 
     // Yarp ports for streaming data from IHumanState interface of HumanStateProvider
     yarp::os::BufferedPort<yarp::sig::Vector> basePoseDataPort;
@@ -670,6 +671,7 @@ void HumanDataCollector::run()
 
                 pImpl->humanDataStruct.dynamicsJointNames.clear();
                 pImpl->humanDataStruct.data["jointTorques"] = std::vector<std::vector<double>>();
+                pImpl->humanDataStruct.data["internalWrenches"] = std::vector<std::vector<double>>();
             }
 
         }
@@ -780,6 +782,7 @@ void HumanDataCollector::run()
         pImpl->dynamicsNumberOfJoints = pImpl->iHumanDynamics->getNumberOfJoints();
         pImpl->dynamicsJointNames = pImpl->iHumanDynamics->getJointNames();
         pImpl->jointTorquesVec = pImpl->iHumanDynamics->getJointTorques();
+        pImpl->internalWrenchesVec = pImpl->iHumanDynamics->getInternalWrenches();
 
         pImpl->task1_wrenchEstimatesInLinkFrameVec       = pImpl->iHumanWrenchEstimates->getWrenchesInFrame(hde::interfaces::IHumanWrench::TaskType::Task1,
                                                                                                             hde::interfaces::IHumanWrench::WrenchType::Estimated,
@@ -891,6 +894,7 @@ void HumanDataCollector::run()
                     linkPose.at(5) = pImpl->linkTransformsMap[linkName].getRotation().asRPY().getVal(2);
 
                     pImpl->humanDataStruct.linkData[linkName]["pose"].push_back(linkPose);
+                    
                 }
 
                 {
@@ -963,6 +967,13 @@ void HumanDataCollector::run()
             }
 
             pImpl->humanDataStruct.data["jointTorques"].push_back(pImpl->jointTorquesVec);
+            
+            for (size_t v = 0; v < pImpl->linkNames.size(); v++) {
+                std::vector<double> linkInternalWrench(6, 0.0);
+                linkInternalWrench = pImpl->internalWrenchesVec.at(v);
+
+                pImpl->humanDataStruct.linkData[pImpl->linkNames.at(v)]["internalWrenches"].push_back(linkInternalWrench);
+            }
         }
 
     }

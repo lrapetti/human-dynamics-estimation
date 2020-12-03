@@ -99,6 +99,7 @@ public:
     std::vector<std::string> getJointNames() const override;
     size_t getNumberOfJoints() const override;
     std::vector<double> getJointTorques() const override;
+    std::vector<std::vector<double>> getInternalWrenches() const override;
 };
 
 #endif // HDE_DEVICES_HUMANDYNAMICSESTIMATOR

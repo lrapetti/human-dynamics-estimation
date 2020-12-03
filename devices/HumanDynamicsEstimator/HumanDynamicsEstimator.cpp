@@ -272,6 +272,7 @@ struct BerdyData
         iDynTree::JointDOFsDoubleArray jointTorqueEstimates;
         iDynTree::LinkNetExternalWrenches task1_linkNetExternalWrenchEstimatesInLinkFrame;
         iDynTree::LinkNetExternalWrenches linkNetExternalWrenchEstimates;
+        iDynTree::LinkInternalWrenches linkInternalWrenchEstimates;
         iDynTree::LinkAccArray linkClassicalProperAccelerationEstimates; // This is also called sensor proper acceleration in Traversaro's PhD Thesis
     } estimates;
 };
@@ -1652,6 +1653,10 @@ bool HumanDynamicsEstimator::open(yarp::os::Searchable& config)
 
     pImpl->berdyData.estimates.linkNetExternalWrenchEstimates = iDynTree::LinkWrenches(pImpl->berdyData.helper.model().getNrOfLinks());
     pImpl->berdyData.estimates.linkNetExternalWrenchEstimates.zero();
+    
+    // Set the links internal wrench estimates size and initialize to zero
+    // pImpl->berdyData.estimates.linkInternalWrenchEstimates = iDynTree::LinkWrenches(pImpl->berdyData.helper.model().getNrOfLinks());
+    // pImpl->berdyData.estimates.linkInternalWrenchEstimates.zero();
 
     // Set the links classical proper acceleration estimates size
     pImpl->berdyData.estimates.linkClassicalProperAccelerationEstimates = iDynTree::LinkAccArray(pImpl->berdyData.helper.model().getNrOfLinks());
@@ -1847,6 +1852,11 @@ bool HumanDynamicsEstimator::open(yarp::os::Searchable& config)
     // Extract links net external wrench from estimated dynamic variables
     pImpl->berdyData.helper.extractLinkNetExternalWrenchesFromDynamicVariables(estimatedDynamicVariables,
                                                                                pImpl->berdyData.estimates.linkNetExternalWrenchEstimates);
+                                                                               
+    // Extract links internal forces (joint wrenches) from estimated dynamic variables
+    // pImpl->berdyData.helper.extractLinkInternalWrenchesFromDynamicVariables(estimatedDynamicVariables,
+    //                                                                        pImpl->berdyData.estimates.linkInternalWrenchEstimates);
+                                                                               
     return true;
 }
 
@@ -2606,6 +2616,10 @@ void HumanDynamicsEstimator::run()
     pImpl->berdyData.helper.extractJointTorquesFromDynamicVariables(estimatedDynamicVariables,
                                                                     pImpl->berdyData.state.jointsPosition,
                                                                     pImpl->berdyData.estimates.jointTorqueEstimates);
+                                                                    
+    // Extract internal wrenches (joint wrenches) from estimated dynamic variables
+    // pImpl->berdyData.helper.extractLinkInternalWrenchesFromDynamicVariables(estimatedDynamicVariables,
+    //                                                                        pImpl->berdyData.estimates.linkInternalWrenchEstimates);
 
     // Extract links net external wrench from estimated dynamic variables
     pImpl->berdyData.helper.extractLinkNetExternalWrenchesFromDynamicVariables(estimatedDynamicVariables,
@@ -2908,6 +2922,29 @@ std::vector<double> HumanDynamicsEstimator::getJointTorques() const
         jointTorques.at(index) = pImpl->berdyData.estimates.jointTorqueEstimates.getVal(index);
     }
     return jointTorques;
+}
+
+std::vector<std::vector<double>> HumanDynamicsEstimator::getInternalWrenches() const
+{
+    std::vector<std::vector<double>> internalWrenches;
+    /*
+    std::lock_guard<std::mutex> lock(pImpl->mutex);
+    size_t vecSize = pImpl->berdyData.estimates.linkInternalWrenchEstimates.getNrOfLinks();
+    internalWrenches.resize(vecSize);
+    for (size_t index = 0; index < vecSize; index++) {
+        std::vector<double> wrenchBuffer;
+        wrenchBuffer.resize(6);
+        wrenchBuffer.at(1) = pImpl->berdyData.estimates.linkInternalWrenchEstimates(index).getVal(1);
+        wrenchBuffer.at(2) = pImpl->berdyData.estimates.linkInternalWrenchEstimates(index).getVal(1);
+        wrenchBuffer.at(3) = pImpl->berdyData.estimates.linkInternalWrenchEstimates(index).getVal(1);
+        wrenchBuffer.at(4) = pImpl->berdyData.estimates.linkInternalWrenchEstimates(index).getVal(1);
+        wrenchBuffer.at(5) = pImpl->berdyData.estimates.linkInternalWrenchEstimates(index).getVal(1);
+        wrenchBuffer.at(5) = pImpl->berdyData.estimates.linkInternalWrenchEstimates(index).getVal(1);
+        
+        internalWrenches.at(index) = wrenchBuffer;
+    }
+    */
+    return internalWrenches;
 }
 
 // =============

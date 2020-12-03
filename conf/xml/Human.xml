@@ -422,7 +422,7 @@
         <action phase="shutdown" level="2" type="detach"/>
     </device>
 
-    <device type="human_data_collector" name="HumanDataCollector">
+    <!--device type="human_data_collector" name="HumanDataCollector">
         <param name="period">0.02</param>
         <param name="portPrefix">Human</param>
         <param name="matioLogger">true</param>
@@ -436,7 +436,7 @@
             </paramlist>
         </action>
         <action phase="shutdown" level="1" type="detach"/>
-    </device>
+    </device-->
 
     <!-- <device type="human_control_board" name="HumanControlBoard">
         <param name="period">0.100</param>

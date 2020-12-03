@@ -27,6 +27,7 @@ public:
     virtual size_t getNumberOfJoints() const = 0;
 
     virtual std::vector<double> getJointTorques() const = 0;
+    virtual std::vector<std::vector<double>> getInternalWrenches() const = 0;
 };
 
 #endif // HDE_INTERFACES_IHUMANDYNAMICS
