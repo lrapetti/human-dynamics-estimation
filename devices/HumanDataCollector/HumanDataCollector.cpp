@@ -330,6 +330,7 @@ public:
     size_t dynamicsNumberOfJoints;
     std::vector<std::string> dynamicsJointNames;
     std::vector<double> jointTorquesVec;
+    std::vector<std::array<double,6>> internalWrenches;
 
     // Yarp ports for streaming data from IHumanState interface of HumanStateProvider
     yarp::os::BufferedPort<yarp::sig::Vector> basePoseDataPort;
@@ -780,6 +781,8 @@ void HumanDataCollector::run()
         pImpl->dynamicsNumberOfJoints = pImpl->iHumanDynamics->getNumberOfJoints();
         pImpl->dynamicsJointNames = pImpl->iHumanDynamics->getJointNames();
         pImpl->jointTorquesVec = pImpl->iHumanDynamics->getJointTorques();
+        pImpl->internalWrenches = pImpl->iHumanDynamics->getInternalWrenches();
+
 
         pImpl->task1_wrenchEstimatesInLinkFrameVec       = pImpl->iHumanWrenchEstimates->getWrenchesInFrame(hde::interfaces::IHumanWrench::TaskType::Task1,
                                                                                                             hde::interfaces::IHumanWrench::WrenchType::Estimated,
@@ -963,6 +966,17 @@ void HumanDataCollector::run()
             }
 
             pImpl->humanDataStruct.data["jointTorques"].push_back(pImpl->jointTorquesVec);
+
+            // Iterate over links
+            // TODO: Improve idyntree vector handling
+            for (size_t linkIndex = 0; linkIndex < pImpl->linkNames.size(); linkIndex++) {
+
+                std::string linkName = pImpl->linkNames.at(linkIndex);
+
+                pImpl->internalWrenches.at(linkIndex);
+
+                pImpl->humanDataStruct.linkData[linkName]["internalWrench"].push_back(std::vector<double>(pImpl->internalWrenches.at(linkIndex).begin(), pImpl->internalWrenches.at(linkIndex).end()));
+            }
         }
 
     }
