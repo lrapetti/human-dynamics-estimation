@@ -152,6 +152,16 @@
         <action phase="shutdown" level="5" type="detach"/>
     </device>
 
+    <device type="human_state_visualizer" name="HumanStateVisualizer">
+        <param name="period">0.02</param>
+        <action phase="startup" level="5" type="attach">
+            <paramlist name="networks">
+                <elem name="HumanStateWrapperLabel">HumanStateProvider</elem>
+            </paramlist>
+        </action>
+        <action phase="shutdown" level="5" type="detach"/>
+    </device>
+
     <!-- Uncomment to stream the output of HumanStateProvider on a YARP port -->
     <device type="human_state_wrapper" name="HumanStateWrapper">
         <param name="period">0.02</param>

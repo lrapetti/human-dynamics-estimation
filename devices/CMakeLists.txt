@@ -3,6 +3,7 @@
 # GNU Lesser General Public License v2.1 or any later version.
 
 add_subdirectory(HumanStateProvider)
+add_subdirectory(HumanStateVisualizer)
 add_subdirectory(HumanWrenchProvider)
 add_subdirectory(HumanDynamicsEstimator)
 add_subdirectory(HumanControlBoard)
