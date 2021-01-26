@@ -998,6 +998,7 @@ public:
 
     // First wrench bool flag
     bool firstWrenchData;
+    bool firstRun;
     double wrenchSmoothingFactor;
     std::vector<double> smoothedWrenchValues;
 
@@ -1343,6 +1344,7 @@ bool HumanDynamicsEstimator::open(yarp::os::Searchable& config)
 
     // Set first wrench bool flag
     pImpl->firstWrenchData = true;
+    pImpl->firstRun = true;
 
     // Initialize smoothed wrench values buffer
     pImpl->smoothedWrenchValues.resize(6 * pImpl->wrenchSensorsLinkNames.size(), 0.0);
@@ -2113,6 +2115,7 @@ void HumanDynamicsEstimator::run()
         }
 
     }
+    pImpl->firstWrenchData = false;
 
     // Call wrench smoothing with vector of input wrench values from HumanWrenchProvider
     wrenchSmoothing(correctedWrenchValues, pImpl->smoothedWrenchValues);
@@ -2127,13 +2130,33 @@ void HumanDynamicsEstimator::run()
 
         iDynTree::Rotation w_R_ffx(kinDynComputations.getWorldTransform(pImpl->humanModel.getLinkIndex(linkName)).getRotation());
 
+        double vecData_1[3] = {w_R_ffx.getVal(0,2), w_R_ffx.getVal(1,2), w_R_ffx.getVal(2,2)};
+        iDynTree::Vector3 z_link(vecData_1, 3);
+        double vecData[3] = {0,0,1};
+        iDynTree::Vector3 z_axis(vecData, 3);
+        iDynTree::Vector3 rotation_axis(vecData, 3);
+
+        iDynTree::toEigen(rotation_axis)  = iDynTree::skew(iDynTree::toEigen(z_link)) * iDynTree::toEigen(z_axis);
+        double sin_angle = std::sqrt(std::pow(rotation_axis.getVal(0),2) + std::pow(rotation_axis.getVal(1),2) + std::pow(rotation_axis.getVal(2),2)); 
+        double cos_angle = iDynTree::toEigen(z_link).dot(iDynTree::toEigen(z_axis));
+
         auto cosBeta = w_R_ffx.getVal(2,2);
-        auto sinBeta = std::sqrt(1-(std::pow(cosBeta, 2)));
+        auto sinBeta = w_R_ffx.getVal(2,0);
+
+        // std::cout << linkName << std::endl;
+        // std::cout << "vector " << std::pow(w_R_ffx.getVal(0,2),2) + std::pow(w_R_ffx.getVal(1,2), 2) +  std::pow(w_R_ffx.getVal(2,2),2) << std::endl;
+        // std::cout << "seno " << sin_angle << std::endl;
+        // std::cout << "coseno " << cos_angle << std::endl;
+        // std::cout << "check: " << std::pow(sin_angle,2) + std::pow(cos_angle,2) << std::endl;
+        auto angle = std::atan2(sin_angle, cos_angle);
+        // std::sqrt(1-(std::pow(cosBeta, 2)));
 
         auto beta = std::atan2(sinBeta, cosBeta);
         //yInfo() << LogPrefix << linkName << " Beta is " << beta * (180/M_PI);
 
-        iDynTree::Rotation ffx_R_s = iDynTree::Rotation::RotY(beta);
+        // iDynTree::Rotation ffx_R_s = iDynTree::Rotation::RotY(beta);
+        iDynTree::Direction direction_axis(rotation_axis.getVal(0), rotation_axis.getVal(1), rotation_axis.getVal(2));
+        iDynTree::Rotation ffx_R_s = iDynTree::Rotation::RotAxis(direction_axis, angle);
 
         iDynTree::Transform t = iDynTree::Transform::Identity();
         t.setRotation(ffx_R_s);
@@ -2146,7 +2169,12 @@ void HumanDynamicsEstimator::run()
         }
 
         Eigen::Matrix<double,6,1> newCorrectedWrenchEigen;
-        newCorrectedWrenchEigen = iDynTree::toEigen(t.inverse().asAdjointTransformWrench()) * iDynTree::toEigen(inputWrench);
+        // inputWrench.setVal(0,0);
+        // inputWrench.setVal(1,0);
+        // inputWrench.setVal(3,0);
+        // inputWrench.setVal(4,0);
+        // inputWrench.setVal(5,0);
+        newCorrectedWrenchEigen = iDynTree::toEigen(t.asAdjointTransformWrench()) * iDynTree::toEigen(inputWrench);
 
         // Set corrected wrench values buffer
         for (size_t e = 0; e < 6; e++) {
@@ -2156,7 +2184,7 @@ void HumanDynamicsEstimator::run()
     }
 
     // Call wrench smoothing with vector of new corrected wrench values
-    // wrenchSmoothing(newCorrectedWrenchValues);
+    // wrenchSmoothing(newCorrectedWrenchValues, pImpl->smoothedWrenchValues);
 
     // Express task 1 measured wrench in different frames
     expressWrenchInDifferentFrames(pImpl->smoothedWrenchValues,
@@ -2328,8 +2356,8 @@ void HumanDynamicsEstimator::run()
     }
 
 
-    pImpl->estimatedObjectMass = std::abs(std::sqrt(std::pow(sumOfHandEstimatedTask1Forces.getVal(0), 2) +
-                                                    std::pow(sumOfHandEstimatedTask1Forces.getVal(1), 2) +
+    pImpl->estimatedObjectMass = std::abs(std::sqrt( // std::pow(sumOfHandEstimatedTask1Forces.getVal(0), 2) +
+                                                     // std::pow(sumOfHandEstimatedTask1Forces.getVal(1), 2) +
                                                     std::pow(sumOfHandEstimatedTask1Forces.getVal(2), 2) ) / pImpl->gravity.getVal(2));
 
     // Round to 2 decimals
