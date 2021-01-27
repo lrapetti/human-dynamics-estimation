@@ -8,7 +8,6 @@
 
 #include "HumanStateVisualizer.h"
 #include "IHumanState.h"
-#include <HumanDynamicsEstimation/HumanState.h>
 
 #include <yarp/os/LogStream.h>
 #include <yarp/os/ResourceFinder.h>
@@ -171,10 +170,11 @@ void HumanStateVisualizer::run()
     pImpl->viz.modelViz("human").setPositions(pImpl->wHb, pImpl->joints);
     yInfo() << LogPrefix << "Ready to draw"; 
     
-    // if (pImpl->viz.run())
-    // {
-    //     pImpl->viz.draw();
-    // }
+    pImpl->viz.draw();
+    if (pImpl->viz.run())
+    {
+        pImpl->viz.draw();
+    }
 }
 
 bool HumanStateVisualizer::attach(yarp::dev::PolyDriver* poly)
