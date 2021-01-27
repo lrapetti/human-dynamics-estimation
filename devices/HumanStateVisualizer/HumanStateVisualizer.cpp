@@ -140,8 +140,17 @@ void HumanStateVisualizer::run()
     std::cout << "visualizer running" << std::endl;
 
     // Get human state from iHumanState
-    iDynTree::Vector4 quaternion(baseOrientationInterface);
-    iDynTree::Position position(basePositionInterface);
+    iDynTree::Vector4 quaternion;
+    quaternion.setVal(0, baseOrientationInterface.at(0));
+    quaternion.setVal(1, baseOrientationInterface.at(1));
+    quaternion.setVal(2, baseOrientationInterface.at(2));
+    quaternion.setVal(3, baseOrientationInterface.at(3));
+
+    iDynTree::Position position;
+    position.setVal(0, basePositionInterface.at(0));
+    position.setVal(1, basePositionInterface.at(1));
+    position.setVal(2, basePositionInterface.at(2));
+
     pImpl->wHb.setRotation(iDynTree::Rotation::RotationFromQuaternion(quaternion));
     pImpl->wHb.setPosition(position);
 
