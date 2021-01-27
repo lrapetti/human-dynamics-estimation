@@ -11,6 +11,10 @@
 #include <HumanDynamicsEstimation/HumanState.h>
 
 #include <yarp/os/LogStream.h>
+#include <yarp/os/ResourceFinder.h>
+#include <iDynTree/ModelIO/ModelLoader.h>
+#include <iDynTree/Visualizer.h>
+
 #include <iostream>
 
 const std::string DeviceName = "HumanStateVisualizer";
@@ -23,6 +27,10 @@ class HumanStateVisualizer::impl
 {
 public:
     hde::interfaces::IHumanState* iHumanState = nullptr;
+    iDynTree::Visualizer viz;
+
+    iDynTree::Transform wHb;
+    iDynTree::VectorDynSize joints;
 };
 
 HumanStateVisualizer::HumanStateVisualizer()
@@ -42,11 +50,63 @@ bool HumanStateVisualizer::open(yarp::os::Searchable& config)
         yInfo() << LogPrefix << "Using default period:" << DefaultPeriod << "s";
     }
 
+    if (!(config.check("urdf") && config.find("urdf").isString())) {
+        yError() << LogPrefix << "urdf option not found or not valid";
+        return false;
+    }
+
     // ===============================
     // PARSE THE CONFIGURATION OPTIONS
     // ===============================
 
     double period = config.check("period", yarp::os::Value(DefaultPeriod)).asDouble();
+    const std::string urdfFileName = config.find("urdf").asString();
+
+    auto& rf = yarp::os::ResourceFinder::getResourceFinderSingleton();
+    std::string urdfFilePath = rf.findFile(urdfFileName);
+    if (urdfFilePath.empty()) {
+        yError() << LogPrefix << "Failed to find file" << config.find("urdf").asString();
+        return false;
+    }
+
+    // =========================
+    // INITIALIZE THE VISUALIZER
+    // =========================
+
+    iDynTree::ModelLoader modelLoader;
+    if (!modelLoader.loadModelFromFile(urdfFilePath) || !modelLoader.isValid()) {
+        yError() << LogPrefix << "Failed to load model" << urdfFilePath;
+        return false;
+    }
+
+    iDynTree::VisualizerOptions options, textureOptions;
+    // iDynTree::ITexture* textureInterface = viz.textures().add("AdditionalTexture", textureOptions);
+
+    // pImpl->viz.camera().setPosition(iDynTree::Position(1.2, 0.0, 0.5));
+    // pImpl->viz.camera().setTarget(iDynTree::Position(-0.15, 0.0, 0.15));
+    // viz.camera().animator()->enableMouseControl(true);
+
+    yInfo() << LogPrefix << "Initializing Visualization";
+
+    // pImpl->viz.init(options);
+
+    yInfo() << LogPrefix << "Loading Model ...";
+
+    pImpl->viz.addModel(modelLoader.model(), "human");
+
+    yInfo() << LogPrefix << "Model loaded";
+
+    // pImpl->viz.camera().animator()->enableMouseControl();
+
+    pImpl->viz.run();
+
+    // ====================
+    // INITIALIZE VARIABLES
+    // ====================
+
+    pImpl->wHb = iDynTree::Transform::Identity();
+    pImpl->joints.resize(pImpl->viz.modelViz("human").model().getNrOfDOFs());
+    pImpl->joints.zero();
 
     // ================
     // SETUP THE THREAD
@@ -78,6 +138,34 @@ void HumanStateVisualizer::run()
 
     // TODO
     std::cout << "visualizer running" << std::endl;
+
+    // Get human state from iHumanState
+    iDynTree::Vector4 quaternion(baseOrientationInterface);
+    iDynTree::Position position(basePositionInterface);
+    pImpl->wHb.setRotation(iDynTree::Rotation::RotationFromQuaternion(quaternion));
+    pImpl->wHb.setPosition(position);
+
+    for (size_t iHumanInterfaceIdx = 0; iHumanInterfaceIdx < jointNames.size(); iHumanInterfaceIdx++)
+    {
+        std::string jointName = jointNames.at(iHumanInterfaceIdx);
+        double jointVal = jointPositionsInterface.at(iHumanInterfaceIdx);
+
+        iDynTree::JointIndex jointIndex = pImpl->viz.modelViz("human").model().getJointIndex(jointName);
+        if (jointIndex != iDynTree::JOINT_INVALID_INDEX)
+        {
+            pImpl->joints.setVal(jointIndex, jointVal);
+        }
+    }
+
+    // Update the visulizer
+    yInfo() << LogPrefix << "Updating Visualizer for joints: " << pImpl->joints.size();
+    pImpl->viz.modelViz("human").setPositions(pImpl->wHb, pImpl->joints);
+    yInfo() << LogPrefix << "Ready to draw"; 
+    
+    // if (pImpl->viz.run())
+    // {
+    //     pImpl->viz.draw();
+    // }
 }
 
 bool HumanStateVisualizer::attach(yarp::dev::PolyDriver* poly)
