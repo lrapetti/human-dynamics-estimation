@@ -15,6 +15,7 @@
 #include <iDynTree/Visualizer.h>
 
 #include <iostream>
+#include <chrono>
 
 const std::string DeviceName = "HumanStateVisualizer";
 const std::string LogPrefix = DeviceName + " :";
@@ -98,6 +99,7 @@ bool HumanStateVisualizer::open(yarp::os::Searchable& config)
     // pImpl->viz.camera().animator()->enableMouseControl();
 
     pImpl->viz.run();
+    pImpl->viz.draw();
 
     // ====================
     // INITIALIZE VARIABLES
@@ -161,6 +163,7 @@ void HumanStateVisualizer::run()
         iDynTree::JointIndex jointIndex = pImpl->viz.modelViz("human").model().getJointIndex(jointName);
         if (jointIndex != iDynTree::JOINT_INVALID_INDEX)
         {
+            std::cout << "setting value" << jointVal << " for joint: "<< jointName << std::endl;
             pImpl->joints.setVal(jointIndex, jointVal);
         }
     }
@@ -168,13 +171,14 @@ void HumanStateVisualizer::run()
     // Update the visulizer
     yInfo() << LogPrefix << "Updating Visualizer for joints: " << pImpl->joints.size();
     pImpl->viz.modelViz("human").setPositions(pImpl->wHb, pImpl->joints);
-    yInfo() << LogPrefix << "Ready to draw"; 
+    yInfo() << LogPrefix << "Ready to draw";
     
-    pImpl->viz.draw();
     if (pImpl->viz.run())
     {
+        yInfo() << LogPrefix << "drawing";
         pImpl->viz.draw();
     }
+    
 }
 
 bool HumanStateVisualizer::attach(yarp::dev::PolyDriver* poly)
