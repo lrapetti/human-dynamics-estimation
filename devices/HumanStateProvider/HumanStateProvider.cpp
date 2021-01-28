@@ -10,6 +10,8 @@
 #include "IKWorkerPool.h"
 #include "InverseVelocityKinematics/InverseVelocityKinematics.hpp"
 
+#include "IHumanWrench.h"
+
 #include <Wearable/IWear/IWear.h>
 #include <iDynTree/InverseKinematics.h>
 #include <iDynTree/Model/Model.h>
@@ -158,6 +160,7 @@ class HumanStateProvider::impl
 public:
     // Attached interface
     wearable::IWear* iWear = nullptr;
+    hde::interfaces::IHumanWrench* iHumanWrench = nullptr;
 
     bool allowIKFailures;
     bool useXsensJointsAngles;
@@ -1232,6 +1235,25 @@ void HumanStateProvider::run()
             yError() << LogPrefix << "Failed to get joint angles from input data";
             askToStop();
             return;
+        }
+    }
+
+    // if human-wrench provider is attached, retrieve the links wrenches
+    if (pImpl->iHumanWrench)
+    {
+        // wait fir the first wrench data to arrive
+        std::vector<double> wrenchValues = pImpl->iHumanWrench->getWrenches();
+
+        for (size_t wrenchSourcesIdx = 0; wrenchSourcesIdx < pImpl->iHumanWrench->getNumberOfWrenchSources(); wrenchSourcesIdx++)
+        {
+            yInfo() << LogPrefix << "wrench source " << pImpl->iHumanWrench->getWrenchSourceNames().at(wrenchSourcesIdx);
+            yInfo() << LogPrefix << "wrenches size " << pImpl->iHumanWrench->getWrenches().size();
+            yInfo() << LogPrefix << "( " << pImpl->iHumanWrench->getWrenches().at(6 * wrenchSourcesIdx + 0) << ", "
+                                         << pImpl->iHumanWrench->getWrenches().at(6 * wrenchSourcesIdx + 1) << ", "
+                                         << pImpl->iHumanWrench->getWrenches().at(6 * wrenchSourcesIdx + 2) << ", "
+                                         << pImpl->iHumanWrench->getWrenches().at(6 * wrenchSourcesIdx + 3) << ", "
+                                         << pImpl->iHumanWrench->getWrenches().at(6 * wrenchSourcesIdx + 4) << ", "
+                                         << pImpl->iHumanWrench->getWrenches().at(6 * wrenchSourcesIdx + 5) << ")";
         }
     }
 
@@ -2612,104 +2634,124 @@ bool HumanStateProvider::attach(yarp::dev::PolyDriver* poly)
         return false;
     }
 
-    if (pImpl->iWear || !poly->view(pImpl->iWear) || !pImpl->iWear) {
-        yError() << LogPrefix << "Failed to view the IWear interface from the PolyDriver";
-        return false;
-    }
+    // Get the device name from the driver
+    const std::string deviceName = poly->getValue("device").asString();
+    std::cerr << "attaching " << deviceName << std::endl;
 
-    while (pImpl->iWear->getStatus() == WearStatus::WaitingForFirstRead) {
-        yInfo() << LogPrefix << "IWear interface waiting for first data. Waiting...";
-        yarp::os::Time::delay(5);
-    }
+    if (deviceName == "iwear_remapper") {
 
-    if (pImpl->iWear->getStatus() != WearStatus::Ok) {
-        yError() << LogPrefix << "The status of the attached IWear interface is not ok ("
-                 << static_cast<int>(pImpl->iWear->getStatus()) << ")";
-        return false;
-    }
-
-    // ===========
-    // CHECK LINKS
-    // ===========
-
-    // Check that the attached IWear interface contains all the model links
-    for (size_t linkIndex = 0; linkIndex < pImpl->humanModel.getNrOfLinks(); ++linkIndex) {
-        // Get the name of the link from the model and its prefix from iWear
-        std::string modelLinkName = pImpl->humanModel.getLinkName(linkIndex);
-
-        if (pImpl->wearableStorage.modelToWearable_LinkName.find(modelLinkName)
-            == pImpl->wearableStorage.modelToWearable_LinkName.end()) {
-            // yWarning() << LogPrefix << "Failed to find" << modelLinkName
-            //           << "entry in the configuration map. Skipping this link.";
-            continue;
-        }
-
-        // Get the name of the sensor associated to the link
-        std::string wearableLinkName =
-            pImpl->wearableStorage.modelToWearable_LinkName.at(modelLinkName);
-
-        // Try to get the sensor
-        auto sensor = pImpl->iWear->getVirtualLinkKinSensor(wearableLinkName);
-        if (!sensor) {
-            // yError() << LogPrefix << "Failed to find sensor associated to link" <<
-            // wearableLinkName
-            //<< "from the IWear interface";
+        if (pImpl->iWear || !poly->view(pImpl->iWear) || !pImpl->iWear) {
+            yError() << LogPrefix << "Failed to view the IWear interface from the PolyDriver";
             return false;
         }
 
-        // Create a sensor map entry using the wearable sensor name as key
-        pImpl->wearableStorage.linkSensorsMap[wearableLinkName] =
-            pImpl->iWear->getVirtualLinkKinSensor(wearableLinkName);
-    }
+        while (pImpl->iWear->getStatus() == WearStatus::WaitingForFirstRead) {
+            yInfo() << LogPrefix << "IWear interface waiting for first data. Waiting...";
+            yarp::os::Time::delay(5);
+        }
 
-    // ============
-    // CHECK JOINTS
-    // ============
+        if (pImpl->iWear->getStatus() != WearStatus::Ok) {
+            yError() << LogPrefix << "The status of the attached IWear interface is not ok ("
+                    << static_cast<int>(pImpl->iWear->getStatus()) << ")";
+            return false;
+        }
 
-    if (pImpl->useXsensJointsAngles) {
-        yDebug() << "Checking joints";
+        // ===========
+        // CHECK LINKS
+        // ===========
 
-        for (size_t jointIndex = 0; jointIndex < pImpl->humanModel.getNrOfDOFs(); ++jointIndex) {
-            // Get the name of the joint from the model and its prefix from iWear
-            std::string modelJointName = pImpl->humanModel.getJointName(jointIndex);
+        // Check that the attached IWear interface contains all the model links
+        for (size_t linkIndex = 0; linkIndex < pImpl->humanModel.getNrOfLinks(); ++linkIndex) {
+            // Get the name of the link from the model and its prefix from iWear
+            std::string modelLinkName = pImpl->humanModel.getLinkName(linkIndex);
 
-            // Urdfs don't have support of spherical joints, IWear instead does.
-            // We use the configuration for addressing this mismatch.
-            if (pImpl->wearableStorage.modelToWearable_JointInfo.find(modelJointName)
-                == pImpl->wearableStorage.modelToWearable_JointInfo.end()) {
-                yWarning() << LogPrefix << "Failed to find" << modelJointName
-                           << "entry in the configuration map. Skipping this joint.";
+            if (pImpl->wearableStorage.modelToWearable_LinkName.find(modelLinkName)
+                == pImpl->wearableStorage.modelToWearable_LinkName.end()) {
+                // yWarning() << LogPrefix << "Failed to find" << modelLinkName
+                //           << "entry in the configuration map. Skipping this link.";
                 continue;
             }
 
-            // Get the name of the sensor associate to the joint
-            std::string wearableJointName =
-                pImpl->wearableStorage.modelToWearable_JointInfo.at(modelJointName).name;
+            // Get the name of the sensor associated to the link
+            std::string wearableLinkName =
+                pImpl->wearableStorage.modelToWearable_LinkName.at(modelLinkName);
 
             // Try to get the sensor
-            auto sensor = pImpl->iWear->getVirtualSphericalJointKinSensor(wearableJointName);
+            auto sensor = pImpl->iWear->getVirtualLinkKinSensor(wearableLinkName);
             if (!sensor) {
-                yError() << LogPrefix << "Failed to find sensor associated with joint"
-                         << wearableJointName << "from the IWear interface";
+                // yError() << LogPrefix << "Failed to find sensor associated to link" <<
+                // wearableLinkName
+                //<< "from the IWear interface";
                 return false;
             }
 
             // Create a sensor map entry using the wearable sensor name as key
-            pImpl->wearableStorage.jointSensorsMap[wearableJointName] = sensor;
+            pImpl->wearableStorage.linkSensorsMap[wearableLinkName] =
+                pImpl->iWear->getVirtualLinkKinSensor(wearableLinkName);
         }
+
+        // ============
+        // CHECK JOINTS
+        // ============
+
+        if (pImpl->useXsensJointsAngles) {
+            yDebug() << "Checking joints";
+
+            for (size_t jointIndex = 0; jointIndex < pImpl->humanModel.getNrOfDOFs(); ++jointIndex) {
+                // Get the name of the joint from the model and its prefix from iWear
+                std::string modelJointName = pImpl->humanModel.getJointName(jointIndex);
+
+                // Urdfs don't have support of spherical joints, IWear instead does.
+                // We use the configuration for addressing this mismatch.
+                if (pImpl->wearableStorage.modelToWearable_JointInfo.find(modelJointName)
+                    == pImpl->wearableStorage.modelToWearable_JointInfo.end()) {
+                    yWarning() << LogPrefix << "Failed to find" << modelJointName
+                            << "entry in the configuration map. Skipping this joint.";
+                    continue;
+                }
+
+                // Get the name of the sensor associate to the joint
+                std::string wearableJointName =
+                    pImpl->wearableStorage.modelToWearable_JointInfo.at(modelJointName).name;
+
+                // Try to get the sensor
+                auto sensor = pImpl->iWear->getVirtualSphericalJointKinSensor(wearableJointName);
+                if (!sensor) {
+                    yError() << LogPrefix << "Failed to find sensor associated with joint"
+                            << wearableJointName << "from the IWear interface";
+                    return false;
+                }
+
+                // Create a sensor map entry using the wearable sensor name as key
+                pImpl->wearableStorage.jointSensorsMap[wearableJointName] = sensor;
+            }
+        }
+        yInfo() << LogPrefix << "iwear_remapper attach() successful";
     }
 
-    // ====
-    // MISC
-    // ====
+    if (deviceName == "human_wrench_provider") {
+        // Attach IHumanWrench interfaces coming from HumanWrenchProvider
+        if (pImpl->iHumanWrench || !poly->view(pImpl->iHumanWrench) || !pImpl->iHumanWrench) {
+            yError() << LogPrefix << "Failed to view iHumanWrench interface from the polydriver";
+            return false;
+        }
 
-    // Start the PeriodicThread loop
-    if (!start()) {
-        yError() << LogPrefix << "Failed to start the loop.";
-        return false;
+        // Check the interface
+        if (pImpl->iHumanWrench->getNumberOfWrenchSources() == 0
+                || pImpl->iHumanWrench->getNumberOfWrenchSources() != pImpl->iHumanWrench->getWrenchSourceNames().size()) {
+            yError() << "The IHumanWrench interface might not be ready";
+            return false;
+        }
+
+        // wait for first data
+        while (pImpl->iHumanWrench->getWrenches().size() != (pImpl->iHumanWrench->getNumberOfWrenchSources() * 6) ) {
+            yInfo() << LogPrefix << "IHumanWrench interface waiting for first data. Waiting...";
+            yarp::os::Time::delay(5);
+        }
+
+        yInfo() << LogPrefix << deviceName << "human_wrench_provider attach() successful";
     }
 
-    yInfo() << LogPrefix << "attach() successful";
     return true;
 }
 
@@ -2736,6 +2778,7 @@ bool HumanStateProvider::detach()
     }
 
     pImpl->iWear = nullptr;
+    pImpl->iHumanWrench = nullptr;
     return true;
 }
 
@@ -2746,19 +2789,31 @@ bool HumanStateProvider::detachAll()
 
 bool HumanStateProvider::attachAll(const yarp::dev::PolyDriverList& driverList)
 {
-    if (driverList.size() > 1) {
-        yError() << LogPrefix << "This wrapper accepts only one attached PolyDriver";
+    if (driverList.size() > 2) {
+        yError() << LogPrefix << "This wrapper accepts maximum two attached PolyDriver";
         return false;
     }
 
-    const yarp::dev::PolyDriverDescriptor* driver = driverList[0];
+    bool attachStatus = true;
 
-    if (!driver) {
-        yError() << LogPrefix << "Passed PolyDriverDescriptor is nullptr";
+    for (size_t i = 0; i < driverList.size(); i++) {
+        const yarp::dev::PolyDriverDescriptor* driver = driverList[i];
+
+        if (!driver) {
+            yError() << LogPrefix << "Passed PolyDriverDescriptor is nullptr";
+            return false;
+        }
+
+        attachStatus = attachStatus && attach(driver->poly);
+    }
+
+    // Start the PeriodicThread loop
+    if (!start()) {
+        yError() << LogPrefix << "Failed to start the loop.";
         return false;
     }
 
-    return attach(driver->poly);
+    return attachStatus;
 }
 
 std::vector<std::string> HumanStateProvider::getJointNames() const

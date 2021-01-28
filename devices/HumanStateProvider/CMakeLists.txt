@@ -29,6 +29,7 @@ target_include_directories(HumanStateProvider PUBLIC
 
 target_link_libraries(HumanStateProvider PUBLIC
     IHumanState
+    IHumanWrench
     YARP::YARP_OS
     YARP::YARP_dev
     YARP::YARP_init

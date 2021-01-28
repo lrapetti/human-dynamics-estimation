@@ -3,7 +3,7 @@
 <robot name="Human-HDE" build=0 portprefix="">
 
     <device type="iwear_remapper" name="XSenseIWearRemapper">
-        <param name="wearableDataPorts">(/XSensSuit/WearableData/data:o)</param>
+        <param name="wearableDataPorts">(/XSensSuit/WearableData/data:o /FTShoeLeft/WearableData/data:o /FTShoeRight/WearableData/data:o)</param>
         <param name="useRPC">false</param>
         <param name="wearableRPCPorts">(/XSensSuit/WearableData/metadataRpc:o)</param>
         <param name="outputPortName">/HDE/XsensIWearRemapper/data:o</param>
@@ -194,9 +194,10 @@
            <param name="map_jLeftBallFoot_rotz">(jLeftBallFoot_rotz, XsensSuit::vSJoint::jLeftBallFoot, 2)</param>
         </group>
 
-        <action phase="startup" level="5" type="attach">
+        <action phase="startup" level="6" type="attach">
             <paramlist name="networks">
                 <elem name="HumanStateProviderLabel">XSenseIWearRemapper</elem>
+                <elem name="HumanDynamicsEstimatorLabel2">HumanWrenchProvider</elem>
             </paramlist>
         </action>
         <action phase="shutdown" level="5" type="detach"/>
@@ -224,6 +225,38 @@
             </paramlist>
         </action>
         <action phase="shutdown" level="5" type="detach"/>
+    </device>
+
+    <device type="human_wrench_provider" name="HumanWrenchProvider">
+        <param name="period">0.100</param>
+        <param name="human_urdf">humanSubject03_66dof.urdf</param>
+        <param name="pHRIScenario">false</param>
+        <param name="number_of_sources">2</param>
+        <param name="sources">(FTShoeLeft FTShoeRight)</param>
+        <group name="FTShoeLeft">
+            <param name="sensorName">FTShoeLeftFTSensors</param>
+            <param name="outputFrame">LeftFoot</param>
+            <param name="type">fixed</param>
+            <param name="rotation">(1.0 0.0 0.0
+                                    0.0 1.0 0.0
+                                    0.0 0.0 1.0)</param>
+            <param name="position">(-0.0026 0.0 -0.1208)</param>
+        </group>
+        <group name="FTShoeRight">
+            <param name="sensorName">FTShoeRightFTSensors</param>
+            <param name="outputFrame">RightFoot</param>
+            <param name="type">fixed</param>
+            <param name="rotation">(1.0 0.0 0.0
+                                    0.0 1.0 0.0
+                                    0.0 0.0 1.0)</param>
+            <param name="position">(-0.0026 0.0 -0.1208)</param>
+        </group>
+        <action phase="startup" level="5" type="attach">
+            <paramlist name="networks">
+                 <elem name="HumanWrenchProviderLabelFTShoeLeft">XSenseIWearRemapper</elem>
+            </paramlist>
+        </action>
+        <action phase="shutdown" level="5" type="detach" />
     </device>
 
 </robot>
