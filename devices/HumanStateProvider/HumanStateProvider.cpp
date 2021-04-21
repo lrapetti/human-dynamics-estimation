@@ -163,6 +163,8 @@ public:
     iDynTree::Model humanModel;
     FloatingBaseName floatingBaseFrame;
 
+    std::vector<std::string> jointList;
+
     std::vector<SegmentInfo> segments;
     std::vector<LinkPairInfo> linkPairs;
 
@@ -252,6 +254,7 @@ public:
     // get input data
     bool getJointAnglesFromInputData(iDynTree::VectorDynSize& jointAngles);
     bool getLinkTransformFromInputData(std::unordered_map<std::string, iDynTree::Transform>& t);
+    bool computeRelativeTransformForInputData(std::unordered_map<std::string, iDynTree::Transform>& t);
     bool getLinkVelocityFromInputData(std::unordered_map<std::string, iDynTree::Twist>& t);
 
     // calibrate data
@@ -441,6 +444,19 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     if (!(config.check("useXsensJointsAngles") && config.find("useXsensJointsAngles").isBool())) {
         yError() << LogPrefix << "useXsensJointsAngles option not found or not valid";
         return false;
+    }
+
+    if (!(config.check("jointList") && config.find("jointList").isList())) {
+        yInfo() << LogPrefix << "jointList option not found or not valid, all the model joints are selected.";
+        pImpl->jointList.clear();
+    }
+    else
+    {
+        auto jointListBottle = config.find("jointList").asList();
+        for (size_t it = 0; it < jointListBottle->size(); it++)
+        {
+            pImpl->jointList.push_back(jointListBottle->get(it).asString());
+        }
     }
 
     std::string baseFrameName;
@@ -788,10 +804,26 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
     }
 
     iDynTree::ModelLoader modelLoader;
-    if (!modelLoader.loadModelFromFile(urdfFilePath) || !modelLoader.isValid()) {
+    std::cerr << "loading model" << std::endl;
+    if ( pImpl->jointList.empty())
+    {
+        std::cerr << "loading model" << std::endl;
+        if (!modelLoader.loadModelFromFile(urdfFilePath) || !modelLoader.isValid()) {
         yError() << LogPrefix << "Failed to load model" << urdfFilePath;
         return false;
+        }
+        std::cerr << "loading model" << std::endl;
     }
+    else
+    {
+        std::cerr << "loading model" << std::endl;
+        if (!modelLoader.loadReducedModelFromFile(urdfFilePath, pImpl->jointList) || !modelLoader.isValid()) {
+        yError() << LogPrefix << "Failed to load model" << urdfFilePath;
+        return false;
+        }
+        std::cerr << "loading model" << std::endl;
+    }
+    
     yInfo() << LogPrefix << "----------------------------------------" << modelLoader.isValid();
     yInfo() << LogPrefix << modelLoader.model().toString();
     yInfo() << LogPrefix << modelLoader.model().getNrOfLinks()
@@ -1132,6 +1164,17 @@ void HumanStateProvider::run()
         return;
     }
 
+    // Get the link transformations from input data
+    if (pImpl->useFixedBase)
+    {
+        if (!pImpl->computeRelativeTransformForInputData(pImpl->linkTransformMatricesRaw)) {
+            yError() << LogPrefix << "Failed to compute relative link transforms";
+            askToStop();
+            return;
+        }
+    }
+
+
     // Apply the secondary calibration to input data
     if (!pImpl->applySecondaryCalibration(pImpl->linkTransformMatricesRaw, pImpl->linkTransformMatrices)) {
         yError() << LogPrefix << "Failed to apply secondary calibration to input data";
@@ -1368,7 +1411,7 @@ void HumanStateProvider::impl::computeSecondaryCalibrationRotationsForChain(cons
     {
         iDynTree::Transform linkForCalibrationTransform = kinDynComputations->getWorldTransform(refLinkForCalibrationName);
         secondaryCalibrationWorld = refLinkForCalibrationTransform * linkForCalibrationTransform.inverse();
-        yInfo() << LogPrefix << "secondary calibration for the World is set";
+        yInfo() << LogPrefix << "secondary calibration for the World is set to " << secondaryCalibrationWorld.toString();
     }
 }
 
@@ -1528,6 +1571,24 @@ bool HumanStateProvider::impl::getLinkTransformFromInputData(
         // Note that this map is used during the IK step for setting a target transform to a
         // link of the model. For this reason the map keys are model names.
         transforms[modelLinkName] = std::move(transform);
+    }
+
+    return true;
+}
+
+bool HumanStateProvider::impl::computeRelativeTransformForInputData(
+    std::unordered_map<std::string, iDynTree::Transform>& transforms)
+{
+    iDynTree::Rotation baseFrameRotationInvese = transforms[floatingBaseFrame].getRotation().inverse();
+    for (const auto& linkMapEntry : wearableStorage.modelToWearable_LinkName) {
+        const ModelLinkName& modelLinkName = linkMapEntry.first;
+
+        // std::cerr << LogPrefix << " Raw Link: " << modelLinkName << std::endl << transforms[modelLinkName].toString() << std::endl;
+
+        iDynTree::Rotation rotation = baseFrameRotationInvese * transforms[modelLinkName].getRotation();
+        transforms[modelLinkName].setRotation(rotation);
+
+        // std::cerr << LogPrefix << " Link: " << modelLinkName << std::endl << transforms[modelLinkName].toString() << std::endl;
     }
 
     return true;
